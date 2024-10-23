@@ -11,3 +11,21 @@ panic-halt = "0.2.0"
 
 # The "rp-pico" is a BSP crate for the "rp2040-hal" crate.
 rp-pico = "0.9.0"
+
+
+[profile.dev]
+codegen-units = 1
+debug = 2
+debug-assertions = true
+incremental = true
+opt-level = 3
+overflow-checks = true
+
+[profile.release]
+codegen-units = 1
+debug = 2
+debug-assertions = false
+incremental = false
+lto = "fat"
+opt-level = 3
+overflow-checks = false
