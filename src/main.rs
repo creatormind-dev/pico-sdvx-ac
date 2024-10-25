@@ -4,6 +4,8 @@
 // Ensures that the program is halted on panic.
 extern crate panic_halt;
 
+use sdvx_ac_pico::*;
+
 // The "rp_pico" crate is a Board Support Package for the RP2040 Hardware Abstraction Layer.
 // Whenever the "bsp" alias is used, it is directly referencing the rp_pico crate.
 use rp_pico as bsp;
@@ -41,12 +43,27 @@ fn main() -> ! {
 
     // Set up the pins.
     let sio = hal::Sio::new(pac.SIO);
-    let _pins = bsp::Pins::new(
+    let pins = bsp::Pins::new(
         pac.IO_BANK0,
         pac.PADS_BANK0,
         sio.gpio_bank0,
         &mut pac.RESETS,
     );
 
-    loop { }
+    // TODO: Remove the this code once all the button and led testing has been done.
+
+    let test_btn_pin = pins.gpio2.into_pull_up_input();
+    let test_led_pin = pins.gpio3.into_push_pull_output();
+
+    let mut button = MicroSwitch::new(test_btn_pin);
+    let mut led = LampHolder::new(test_led_pin);
+
+    loop {
+        if button.is_pressed() {
+            led.on();
+        }
+        else {
+            led.off();
+        }
+    }
 }
