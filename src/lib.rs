@@ -13,16 +13,43 @@ use bsp::hal::gpio::{
 use embedded_hal::digital::{InputPin, OutputPin};
 
 
-pub struct MicroSwitch<I: PinId> {
+pub struct ArcadeButton<MI: PinId, LI: PinId> {
+	micro_switch: MicroSwitch<MI>,
+	lamp_holder: LampHolder<LI>,
+}
+
+impl<MI: PinId, LI: PinId> ArcadeButton<MI, LI> {
+	pub fn new(
+		micro_switch_pin: Pin<MI, FunctionSioInput, PullUp>,
+		lamp_holder_pin: Pin<LI, FunctionSioOutput, PullDown>,
+	) -> Self {
+		Self {
+			micro_switch: MicroSwitch::new(micro_switch_pin),
+			lamp_holder: LampHolder::new(lamp_holder_pin),
+		}
+	}
+
+	pub fn update(&mut self) {
+		if self.micro_switch.is_pressed() {
+			self.lamp_holder.on();
+		}
+		else {
+			self.lamp_holder.off();
+		}
+	}
+}
+
+
+struct MicroSwitch<I: PinId> {
 	pin: Pin<I, FunctionSioInput, PullUp>,
 }
 
 impl<I: PinId> MicroSwitch<I> {
-	pub fn new(pin: Pin<I, FunctionSioInput, PullUp>) -> Self {
+	fn new(pin: Pin<I, FunctionSioInput, PullUp>) -> Self {
 		Self { pin }
 	}
 
-	pub fn is_pressed(&mut self) -> bool {
+	fn is_pressed(&mut self) -> bool {
 		self.pin
 			.is_low()
 			.unwrap()
@@ -30,22 +57,22 @@ impl<I: PinId> MicroSwitch<I> {
 }
 
 
-pub struct LampHolder<I: PinId> {
+struct LampHolder<I: PinId> {
 	pin: Pin<I, FunctionSioOutput, PullDown>,
 }
 
 impl<I: PinId> LampHolder<I> {
-	pub fn new(pin: Pin<I, FunctionSioOutput, PullDown>) -> Self {
+	fn new(pin: Pin<I, FunctionSioOutput, PullDown>) -> Self {
 		Self { pin }
 	}
 
-	pub fn on(&mut self) {
+	fn on(&mut self) {
 		self.pin
 			.set_high()
 			.unwrap();
 	}
 
-	pub fn off(&mut self) {
+	fn off(&mut self) {
 		self.pin
 			.set_low()
 			.unwrap();
