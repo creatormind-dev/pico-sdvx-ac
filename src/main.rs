@@ -50,14 +50,5 @@ fn main() -> ! {
 		&mut pac.RESETS,
 	);
 
-	// TODO: Remove the this code once all the button and led testing has been done.
-
-	let test_btn_pin = pins.gpio2.into_pull_up_input();
-	let test_led_pin = pins.gpio3.into_push_pull_output();
-
-	let mut button = ArcadeButton::new(test_btn_pin, test_led_pin);
-
-	loop {
-		button.update();
-	}
+	loop { }
 }
