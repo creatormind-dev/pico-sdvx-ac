@@ -50,7 +50,7 @@ fn main() -> ! {
 		&mut pac.RESETS,
 	);
 
-	init(pins);
+	let _controller = init(pins);
 
 	loop { }
 }

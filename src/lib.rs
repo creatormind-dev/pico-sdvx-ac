@@ -13,7 +13,7 @@ use bsp::hal::gpio::{
 use embedded_hal::digital::{InputPin, OutputPin};
 
 
-pub fn init(pins: bsp::Pins) {
+pub fn init(pins: bsp::Pins) -> Controller {
 	let mut pico_led_pin = pins.led.into_push_pull_output();
 
 	/* ~~ GPIO/PINOUT CONFIGURATION START ~~ */
@@ -56,7 +56,58 @@ pub fn init(pins: bsp::Pins) {
 
 	// Turns the integrated LED on once the controller is plugged-in.
 	pico_led_pin.set_high().unwrap();
+
+	Controller::new(
+		button_start,
+		button_bt_a,
+		button_bt_b,
+		button_bt_c,
+		button_bt_d,
+		button_fx_l,
+		button_fx_r
+	)
 }
+
+
+pub struct Controller {
+	start: Button,
+	bt_a: Button,
+	bt_b: Button,
+	bt_c: Button,
+	bt_d: Button,
+	fx_l: Button,
+	fx_r: Button,
+
+	// TODO: Add encoder fields.
+}
+
+impl Controller {
+	fn new(
+		start: Button,
+		bt_a: Button,
+		bt_b: Button,
+		bt_c: Button,
+		bt_d: Button,
+		fx_l: Button,
+		fx_r: Button,
+	) -> Self {
+		Self {
+			start,
+			bt_a,
+			bt_b,
+			bt_c,
+			bt_d,
+			fx_l,
+			fx_r,
+		}
+	}
+
+	// TODO: Implement button handling.
+	// TODO: Implement encoder handling.
+}
+
+
+// TODO: Create Encoder struct.
 
 
 struct Button {
@@ -65,7 +116,7 @@ struct Button {
 }
 
 impl Button {
-	pub fn new(
+	fn new(
 		sw_pin: Pin<DynPinId, FunctionSioInput, PullUp>,
 		led_pin: Pin<DynPinId, FunctionSioOutput, PullDown>,
 	) -> Self {
@@ -75,7 +126,7 @@ impl Button {
 		}
 	}
 
-	pub fn update(&mut self) {
+	fn update(&mut self) {
 		if self.switch.is_pressed() {
 			self.led.on();
 		}
