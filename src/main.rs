@@ -50,5 +50,7 @@ fn main() -> ! {
 		&mut pac.RESETS,
 	);
 
+	init(pins);
+
 	loop { }
 }
