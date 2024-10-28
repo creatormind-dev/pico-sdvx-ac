@@ -103,6 +103,7 @@ impl Controller {
 	}
 
 	// TODO: Implement button handling.
+
 	// TODO: Implement encoder handling.
 }
 
@@ -113,6 +114,7 @@ impl Controller {
 struct Button {
 	switch: Switch,
 	led: Led,
+	state: ButtonState,
 }
 
 impl Button {
@@ -123,15 +125,22 @@ impl Button {
 		Self {
 			switch: Switch::new(sw_pin),
 			led: Led::new(led_pin),
+			state: ButtonState::default(),
 		}
 	}
+}
 
-	fn update(&mut self) {
-		if self.switch.is_pressed() {
-			self.led.on();
-		}
-		else {
-			self.led.off();
+
+struct ButtonState {
+	last_pressed: bool,
+	last_debounce_time: u32,
+}
+
+impl Default for ButtonState {
+	fn default() -> Self {
+		Self {
+			last_pressed: false,
+			last_debounce_time: 0,
 		}
 	}
 }
