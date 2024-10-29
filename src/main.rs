@@ -24,6 +24,7 @@ use bsp::hal;
 fn main() -> ! {
 	// Get access to the RP2040 peripherals.
 	let mut pac = pac::Peripherals::take().unwrap();
+	let core = pac::CorePeripherals::take().unwrap();
 
 	// Set up the watchdog driver - needed by the clock setup code.
 	let mut watchdog = hal::Watchdog::new(pac.WATCHDOG);
@@ -50,7 +51,9 @@ fn main() -> ! {
 		&mut pac.RESETS,
 	);
 
-	let _controller = init(pins);
+	let mut controller = init(pins);
 
-	loop { }
+	loop {
+		controller.update_buttons(&core.SYST);
+	}
 }
