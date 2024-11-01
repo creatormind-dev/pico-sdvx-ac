@@ -19,6 +19,9 @@ use bsp::hal::pac;
 // Shorter alias for the Hardware Abstraction Layer.
 use bsp::hal;
 
+// USB Device support.
+use usb_device::{class_prelude::*, prelude::*};
+
 
 #[entry]
 fn main() -> ! {
@@ -30,7 +33,7 @@ fn main() -> ! {
 	let mut watchdog = hal::Watchdog::new(pac.WATCHDOG);
 
 	// Configure the clocks.
-	let _clocks = hal::clocks::init_clocks_and_plls(
+	let clocks = hal::clocks::init_clocks_and_plls(
 		bsp::XOSC_CRYSTAL_FREQ,
 		pac.XOSC,
 		pac.CLOCKS,
@@ -50,6 +53,25 @@ fn main() -> ! {
 		sio.gpio_bank0,
 		&mut pac.RESETS,
 	);
+
+	// Set up the USB driver.
+	let usb_bus = UsbBusAllocator::new(hal::usb::UsbBus::new(
+		pac.USBCTRL_REGS,
+		pac.USBCTRL_DPRAM,
+		clocks.usb_clock,
+		true,
+		&mut pac.RESETS,
+	));
+
+	let mut _usb_dev = UsbDeviceBuilder::new(&usb_bus, UsbVidPid(0x00, 0x00))
+		.strings(&[StringDescriptors::default()
+			.manufacturer("creatormind")
+			.product("SDVX Arcade Controller")
+			.serial_number("0000")
+		])
+		.unwrap()
+		.device_class(0x00)
+		.build();
 
 	let mut controller = init(pins);
 
