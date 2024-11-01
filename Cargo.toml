@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 cortex-m = "0.7.7"
 cortex-m-rt = "0.7.3"
+critical-section = "1.2.0"
 embedded-hal = "1.0.0"
 panic-halt = "1.0.0"
 rp-pico = "0.9.0" # The "rp-pico" is a BSP crate for the "rp2040-hal" crate.

@@ -1,5 +1,8 @@
 #![no_std]
 
+pub mod hid_desc;
+pub use hid_desc::*;
+
 use rp_pico as bsp;
 
 use bsp::hal::gpio::{

@@ -16,11 +16,28 @@ use bsp::entry;
 // Shorter alias for the Peripheral Access Crate.
 use bsp::hal::pac;
 
+// The macro for interrupts functions.
+use bsp::hal::pac::interrupt;
+
 // Shorter alias for the Hardware Abstraction Layer.
 use bsp::hal;
 
 // USB Device support.
 use usb_device::{class_prelude::*, prelude::*};
+
+// USB Human Interface Device (HID) Class support.
+use usbd_hid::descriptor::generator_prelude::*;
+use usbd_hid::hid_class::HIDClass;
+
+
+/// The USB Device Driver (shared with the interrupt).
+static mut USB_DEVICE: Option<UsbDevice<hal::usb::UsbBus>> = None;
+
+/// The USB Bus Driver (shared with the interrupt).
+static mut USB_BUS: Option<UsbBusAllocator<hal::usb::UsbBus>> = None;
+
+/// The USB Human Interface Device (HID) Driver (shared with the interrupt).
+static mut USB_HID: Option<HIDClass<hal::usb::UsbBus>> = None;
 
 
 #[entry]
@@ -62,8 +79,18 @@ fn main() -> ! {
 		true,
 		&mut pac.RESETS,
 	));
+	unsafe {
+		USB_BUS = Some(usb_bus);
+	}
 
-	let mut _usb_dev = UsbDeviceBuilder::new(&usb_bus, UsbVidPid(0x00, 0x00))
+	let bus_ref = unsafe { USB_BUS.as_ref().unwrap() };
+
+	let usb_hid = HIDClass::new(bus_ref, GamepadReport::desc(), 60);
+	unsafe {
+		USB_HID = Some(usb_hid);
+	}
+
+	let usb_dev = UsbDeviceBuilder::new(bus_ref, UsbVidPid(0x00, 0x00))
 		.strings(&[StringDescriptors::default()
 			.manufacturer("creatormind")
 			.product("SDVX Arcade Controller")
@@ -72,10 +99,49 @@ fn main() -> ! {
 		.unwrap()
 		.device_class(0x00)
 		.build();
+	unsafe {
+		USB_DEVICE = Some(usb_dev);
+	}
+
+	unsafe {
+		// Enable the USB interrupt.
+		pac::NVIC::unmask(pac::Interrupt::USBCTRL_IRQ);
+	}
 
 	let mut controller = init(pins);
 
 	loop {
+		// TODO: Remove example code.
+
 		controller.update_buttons(&core.SYST);
+
+		let report = GamepadReport {
+			buttons: 0b0000_0001,
+			x: 0,
+			y: 0,
+		};
+
+		submit_gamepad_report(report)
+			.ok()
+			.unwrap_or(0);
 	}
+}
+
+
+/// Submits a new gamepad report to the USB stack.
+fn submit_gamepad_report(report: GamepadReport) -> Result<usize, usb_device::UsbError> {
+	critical_section::with(|_| unsafe {
+		USB_HID.as_mut().map(|hid| hid.push_input(&report))
+	})
+	.unwrap()
+}
+
+/// This function is called whenever the USB hardware generates an interrupt request.
+#[allow(non_snake_case)]
+#[interrupt]
+unsafe fn USBCTRL_IRQ() {
+	let usb_dev = USB_DEVICE.as_mut().unwrap();
+	let usb_hid = USB_HID.as_mut().unwrap();
+
+	usb_dev.poll(&mut [usb_hid]);
 }
