@@ -95,6 +95,8 @@ pub struct Controller {
 	fx_r: Button,
 
 	// TODO: Add encoder fields.
+
+	debounce_mode: DebounceMode,
 }
 
 impl Controller {
@@ -116,6 +118,7 @@ impl Controller {
 				bt_d,
 				fx_l,
 				fx_r,
+				debounce_mode: DebounceMode::Hold,
 			})
 		}
 	}
@@ -175,6 +178,18 @@ impl Controller {
 			&mut self.fx_r,
 		]
 	}
+}
+
+
+/// Determines the type of debounce algorithm to use with the buttons.
+pub enum DebounceMode {
+	/// Immediately reports when a switch is triggered and holds it for an [SW_DEBOUNCE_DURATION_US]
+	/// amount of time.
+	Hold,
+
+	/// Waits for a switch to output a constant [SW_DEBOUNCE_DURATION_US] amount of time before
+	/// reporting.
+	Wait,
 }
 
 
