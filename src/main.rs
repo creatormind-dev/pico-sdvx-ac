@@ -16,7 +16,7 @@ use bsp::entry;
 // Shorter alias for the Peripheral Access Crate.
 use bsp::hal::pac;
 
-// The macro for interrupts functions.
+// The macro for interrupt functions.
 use bsp::hal::pac::interrupt;
 
 // Shorter alias for the Hardware Abstraction Layer.
@@ -90,11 +90,12 @@ fn main() -> ! {
 		USB_HID = Some(usb_hid);
 	}
 
+	// Set up the USB Device.
 	let usb_dev = UsbDeviceBuilder::new(bus_ref, UsbVidPid(0x00, 0x00))
 		.strings(&[StringDescriptors::default()
 			.manufacturer("creatormind")
-			.product("SDVX Arcade Controller")
-			.serial_number("0000")
+			.product("SDVX Arcade Pico Controller")
+			.serial_number("000000")
 		])
 		.unwrap()
 		.device_class(0x00)
@@ -115,21 +116,17 @@ fn main() -> ! {
 
 		controller.update_buttons(&core.SYST);
 
-		let report = GamepadReport {
-			buttons: 0b0000_0001,
-			x: 0,
-			y: 0,
-		};
+		let report = GamepadReport::new(0b0000_0001, 0, 0);
 
-		submit_gamepad_report(report)
+		submit_report(report)
 			.ok()
 			.unwrap_or(0);
 	}
 }
 
 
-/// Submits a new gamepad report to the USB stack.
-fn submit_gamepad_report(report: GamepadReport) -> Result<usize, usb_device::UsbError> {
+/// Submits a new report to the USB stack.
+fn submit_report(report: impl AsInputReport) -> Result<usize, usb_device::UsbError> {
 	critical_section::with(|_| unsafe {
 		USB_HID.as_mut().map(|hid| hid.push_input(&report))
 	})

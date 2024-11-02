@@ -18,7 +18,13 @@ use usbd_hid::descriptor::{generator_prelude::*, SerializedDescriptor};
 	}
 )]
 pub struct GamepadReport {
-	pub buttons: u8,
-	pub x: i8,
-	pub y: i8,
+	buttons: u8,
+	x: i8,
+	y: i8,
+}
+
+impl GamepadReport {
+	pub fn new(buttons: u8, x: i8, y: i8) -> Self {
+		Self { buttons, x, y }
+	}
 }

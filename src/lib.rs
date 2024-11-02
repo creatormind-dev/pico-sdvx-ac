@@ -150,8 +150,8 @@ impl Button {
 		led_pin: Pin<DynPinId, FunctionSioOutput, PullDown>,
 	) -> Self {
 		Self {
-			switch: Switch::new(sw_pin),
-			led: Led::new(led_pin),
+			switch: Switch(sw_pin),
+			led: Led(led_pin),
 			state: ButtonState::default(),
 		}
 	}
@@ -173,40 +173,28 @@ impl Default for ButtonState {
 }
 
 
-struct Switch {
-	pin: Pin<DynPinId, FunctionSioInput, PullUp>,
-}
+struct Switch(Pin<DynPinId, FunctionSioInput, PullUp>);
 
 impl Switch {
-	fn new(pin: Pin<DynPinId, FunctionSioInput, PullUp>) -> Self {
-		Self { pin }
-	}
-
 	fn is_pressed(&mut self) -> bool {
-		self.pin
+		self.0
 			.is_low()
 			.unwrap()
 	}
 }
 
 
-struct Led {
-	pin: Pin<DynPinId, FunctionSioOutput, PullDown>,
-}
+struct Led(Pin<DynPinId, FunctionSioOutput, PullDown>);
 
 impl Led {
-	fn new(pin: Pin<DynPinId, FunctionSioOutput, PullDown>) -> Self {
-		Self { pin }
-	}
-
 	fn on(&mut self) {
-		self.pin
+		self.0
 			.set_high()
 			.unwrap();
 	}
 
 	fn off(&mut self) {
-		self.pin
+		self.0
 			.set_low()
 			.unwrap();
 	}
