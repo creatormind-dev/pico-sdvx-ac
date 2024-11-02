@@ -69,9 +69,7 @@ pub fn init(pins: bsp::Pins) {
 	let button_fx_l = Button::new(sw_fx_l_pin, led_fx_l_pin);
 	let button_fx_r = Button::new(sw_fx_r_pin, led_fx_r_pin);
 
-	// Turns the integrated LED on once the controller is plugged-in.
-	pico_led_pin.set_high().unwrap();
-
+	// Initializes the controller with the configured pins.
 	Controller::init(
 		button_start,
 		button_bt_a,
@@ -80,7 +78,10 @@ pub fn init(pins: bsp::Pins) {
 		button_bt_d,
 		button_fx_l,
 		button_fx_r,
-	)
+	);
+
+	// Turns the integrated LED on once the controller is plugged-in.
+	pico_led_pin.set_high().unwrap();
 }
 
 
@@ -97,6 +98,7 @@ pub struct Controller {
 	// TODO: Add encoder fields.
 
 	debounce_mode: DebounceMode,
+	gamepad_report: GamepadReport,
 }
 
 impl Controller {
@@ -119,39 +121,78 @@ impl Controller {
 				fx_l,
 				fx_r,
 				debounce_mode: DebounceMode::Hold,
+				gamepad_report: GamepadReport::default(),
 			})
 		}
 	}
 
-	/// Handles button presses using debouncing and updates the LEDs in the buttons accordingly.
+	/// Handles button presses using debouncing (if enabled) and updates the controller's lighting.
 	pub fn update(&mut self, syst: &SYST) {
-		// Gets the amount of microseconds elapsed since the device booted.
+		let buttons_report = self.update_inputs(syst);
+
+		self.gamepad_report.buttons = buttons_report;
+	}
+
+	fn update_inputs(&mut self, syst: &SYST) -> u8 {
+		// State report for all buttons.
+		let mut report = 0u8;
+		// Gets the amount of time elapsed since the device booted in microseconds.
 		let current_time = syst.cvr.read();
+		// Includes all the buttons in an array for easy iteration.
 		let buttons = self.buttons();
 
+		// Button order is inverted to properly register the report.
 		buttons.reverse();
 
 		for button in buttons {
 			let is_pressed = button.switch.is_pressed();
-			let button_state = &mut button.state;
+			let state = &mut button.state;
 
-			// Check for debouncing.
-			if is_pressed != button_state.last_pressed && (current_time - button_state.last_debounce_time) > SW_DEBOUNCE_DURATION_US {
-				button_state.last_debounce_time = current_time;
-
-				if is_pressed {
-					button.led.on();
-				}
-				else {
-					button.led.off();
-				}
-
-				button_state.last_pressed = is_pressed;
+			if is_pressed && state.last_pressed == false {
+				state.last_debounce_time = current_time;
 			}
+
+			state.last_pressed = is_pressed;
+
+			// The amount of time that has elapsed since the button was "pressed".
+			let elapsed = current_time - state.last_debounce_time;
+
+			// Debounce checking and reporting.
+			report = match self.debounce_mode {
+
+				// For all cases the if statement reports the button as being pressed,
+				// while the else clause reports the opposite.
+
+				DebounceMode::Hold => {
+					if is_pressed || elapsed <= SW_DEBOUNCE_DURATION_US { (report << 1) | 1 }
+					else { report << 1 }
+				}
+
+				DebounceMode::Wait => {
+					if is_pressed && elapsed >= SW_DEBOUNCE_DURATION_US { (report << 1) | 1 }
+					else { report << 1 }
+				}
+
+				DebounceMode::None => {
+					if is_pressed { (report << 1) | 1 }
+					else { report << 1 }
+				}
+			};
 		}
+
+		report
 	}
 
 	// TODO: Implement encoder handling.
+
+	/// Generates a new report based on the current state of the controller.
+	pub fn report(&self) -> GamepadReport {
+		GamepadReport::new(
+			self.gamepad_report.buttons,
+			self.gamepad_report.x,
+			self.gamepad_report.y,
+		)
+	}
 
 	/// Retrieves the Controller instance as a mutable reference.
 	///
@@ -184,12 +225,15 @@ impl Controller {
 /// Determines the type of debounce algorithm to use with the buttons.
 pub enum DebounceMode {
 	/// Immediately reports when a switch is triggered and holds it for an [SW_DEBOUNCE_DURATION_US]
-	/// amount of time.
+	///	amount of time. Also known as "eager debouncing".
 	Hold,
 
 	/// Waits for a switch to output a constant [SW_DEBOUNCE_DURATION_US] amount of time before
-	/// reporting.
+	/// reporting. Also known as "deferred debouncing".
 	Wait,
+
+	/// Disables debouncing.
+	None,
 }
 
 

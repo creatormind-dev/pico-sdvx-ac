@@ -114,11 +114,9 @@ fn main() -> ! {
 	let controller = Controller::get_mut().unwrap();
 
 	loop {
-		// TODO: Remove example code.
-
 		controller.update(&core.SYST);
 
-		let report = GamepadReport::new(0b0000_0001, 0, 0);
+		let report = controller.report();
 
 		submit_report(report)
 			.ok()

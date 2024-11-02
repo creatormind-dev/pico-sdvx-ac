@@ -2,6 +2,7 @@ use usbd_hid::descriptor::{generator_prelude::*, SerializedDescriptor};
 
 
 /// Gamepad Report Descriptor Template.
+#[derive(Default)]
 #[gen_hid_descriptor(
 	(collection = APPLICATION, usage_page = GENERIC_DESKTOP, usage = GAMEPAD) = {
 		(usage_page = BUTTON, usage_min = 0x1, usage_max = 0x7) = {
@@ -18,9 +19,9 @@ use usbd_hid::descriptor::{generator_prelude::*, SerializedDescriptor};
 	}
 )]
 pub struct GamepadReport {
-	buttons: u8,
-	x: i8,
-	y: i8,
+	pub buttons: u8,
+	pub x: i8,
+	pub y: i8,
 }
 
 impl GamepadReport {
