@@ -1,7 +1,7 @@
 #![no_std]
 
 pub mod hid_desc;
-pub use hid_desc::*;
+pub use crate::hid_desc::*;
 
 use rp_pico as bsp;
 
@@ -23,8 +23,13 @@ pub const BT_SIZE: usize = 7;
 pub const SW_DEBOUNCE_DURATION_US: u32 = 4000;
 
 
-/// Initializes the pins that are used by the controller and returns the latter.
-pub fn init(pins: bsp::Pins) -> Controller {
+static mut CONTROLLER: Option<Controller> = None;
+
+
+/// Initializes the pins that are used by the controller.
+///
+/// Allows access to the Controller instance.
+pub fn init(pins: bsp::Pins) {
 	let mut pico_led_pin = pins.led.into_push_pull_output();
 
 	/* ~~ GPIO/PINOUT CONFIGURATION START ~~ */
@@ -67,14 +72,16 @@ pub fn init(pins: bsp::Pins) -> Controller {
 	// Turns the integrated LED on once the controller is plugged-in.
 	pico_led_pin.set_high().unwrap();
 
-	Controller {
-		start: button_start,
-		bt_a: button_bt_a,
-		bt_b: button_bt_b,
-		bt_c: button_bt_c,
-		bt_d: button_bt_d,
-		fx_l: button_fx_l,
-		fx_r: button_fx_r
+	unsafe {
+		*CONTROLLER = Some(Controller {
+			start: button_start,
+			bt_a: button_bt_a,
+			bt_b: button_bt_b,
+			bt_c: button_bt_c,
+			bt_d: button_bt_d,
+			fx_l: button_fx_l,
+			fx_r: button_fx_r
+		});
 	}
 }
 
@@ -94,7 +101,7 @@ pub struct Controller {
 
 impl Controller {
 	/// Handles button presses using debouncing and updates the LEDs in the buttons accordingly.
-	pub fn update_buttons(&mut self, syst: &SYST) {
+	pub fn update(&mut self, syst: &SYST) {
 		// Gets the amount of microseconds elapsed since the device booted.
 		let current_time = syst.cvr.read();
 		let buttons = self.buttons();
@@ -120,6 +127,20 @@ impl Controller {
 	}
 
 	// TODO: Implement encoder handling.
+
+	/// Retrieves the Controller instance as a mutable reference.
+	///
+	/// Note: If the [`init`] function has not been called the value will be `None`.
+	pub fn get_mut() -> Option<&'static mut Self> {
+		unsafe { *CONTROLLER.as_mut() }
+	}
+
+	/// Retrieves the Controller instance as an immutable reference.
+	///
+	/// Note: If the [`init`] function has not been called the value will be `None`.
+	pub fn get_ref() -> Option<&'static Self> {
+		unsafe { CONTROLLER.as_ref() }
+	}
 
 	fn buttons(&mut self) -> [&mut Button; BT_SIZE] {
 		[

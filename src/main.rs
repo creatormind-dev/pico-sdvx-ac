@@ -80,14 +80,14 @@ fn main() -> ! {
 		&mut pac.RESETS,
 	));
 	unsafe {
-		USB_BUS = Some(usb_bus);
+		*USB_BUS = Some(usb_bus);
 	}
 
 	let bus_ref = unsafe { USB_BUS.as_ref().unwrap() };
 
 	let usb_hid = HIDClass::new(bus_ref, GamepadReport::desc(), 60);
 	unsafe {
-		USB_HID = Some(usb_hid);
+		*USB_HID = Some(usb_hid);
 	}
 
 	// Set up the USB Device.
@@ -101,7 +101,7 @@ fn main() -> ! {
 		.device_class(0x00)
 		.build();
 	unsafe {
-		USB_DEVICE = Some(usb_dev);
+		*USB_DEVICE = Some(usb_dev);
 	}
 
 	unsafe {
@@ -109,12 +109,14 @@ fn main() -> ! {
 		pac::NVIC::unmask(pac::Interrupt::USBCTRL_IRQ);
 	}
 
-	let mut controller = init(pins);
+	init(pins);
+
+	let controller = Controller::get_mut().unwrap();
 
 	loop {
 		// TODO: Remove example code.
 
-		controller.update_buttons(&core.SYST);
+		controller.update(&core.SYST);
 
 		let report = GamepadReport::new(0b0000_0001, 0, 0);
 
@@ -126,7 +128,7 @@ fn main() -> ! {
 
 
 /// Submits a new report to the USB stack.
-fn submit_report(report: impl AsInputReport) -> Result<usize, usb_device::UsbError> {
+fn submit_report(report: impl AsInputReport) -> Result<usize, UsbError> {
 	critical_section::with(|_| unsafe {
 		USB_HID.as_mut().map(|hid| hid.push_input(&report))
 	})
