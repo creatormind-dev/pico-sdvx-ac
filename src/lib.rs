@@ -41,7 +41,7 @@ pub fn init(pins: bsp::Pins) {
 
 	// These are the switches of the buttons.
 
-	let sw_start_pin = pins.gpio14.into_pull_up_input().into_dyn_pin();
+	let sw_start_pin = pins.gpio0.into_pull_up_input().into_dyn_pin();
 	let sw_bt_a_pin = pins.gpio2.into_pull_up_input().into_dyn_pin();
 	let sw_bt_b_pin = pins.gpio4.into_pull_up_input().into_dyn_pin();
 	let sw_bt_c_pin = pins.gpio6.into_pull_up_input().into_dyn_pin();
@@ -51,7 +51,7 @@ pub fn init(pins: bsp::Pins) {
 
 	// These are the lamp holders/LEDs of the buttons.
 
-	let led_start_pin = pins.gpio15.into_push_pull_output().into_dyn_pin();
+	let led_start_pin = pins.gpio1.into_push_pull_output().into_dyn_pin();
 	let led_bt_a_pin = pins.gpio3.into_push_pull_output().into_dyn_pin();
 	let led_bt_b_pin = pins.gpio5.into_push_pull_output().into_dyn_pin();
 	let led_bt_c_pin = pins.gpio7.into_push_pull_output().into_dyn_pin();
