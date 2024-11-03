@@ -80,14 +80,14 @@ fn main() -> ! {
 		&mut pac.RESETS,
 	));
 	unsafe {
-		*USB_BUS = Some(usb_bus);
+		USB_BUS = Some(usb_bus);
 	}
 
 	let bus_ref = unsafe { USB_BUS.as_ref().unwrap() };
 
 	let usb_hid = HIDClass::new(bus_ref, GamepadReport::desc(), 60);
 	unsafe {
-		*USB_HID = Some(usb_hid);
+		USB_HID = Some(usb_hid);
 	}
 
 	// Set up the USB Device.
@@ -101,7 +101,7 @@ fn main() -> ! {
 		.device_class(0x00)
 		.build();
 	unsafe {
-		*USB_DEVICE = Some(usb_dev);
+		USB_DEVICE = Some(usb_dev);
 	}
 
 	unsafe {
@@ -111,7 +111,8 @@ fn main() -> ! {
 
 	init(pins);
 
-	let controller = Controller::get_mut().unwrap();
+	let controller = Controller::get_mut().unwrap()
+		.with_debounce_mode(DebounceMode::Hold);
 
 	loop {
 		controller.update(&core.SYST);

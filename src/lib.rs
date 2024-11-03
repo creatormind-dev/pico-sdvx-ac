@@ -87,13 +87,13 @@ pub fn init(pins: bsp::Pins) {
 
 /// Sound Voltex controller.
 pub struct Controller {
-	start: Button,
-	bt_a: Button,
-	bt_b: Button,
-	bt_c: Button,
-	bt_d: Button,
-	fx_l: Button,
-	fx_r: Button,
+	start: Button,	// 0
+	bt_a: Button,	// 1
+	bt_b: Button,	// 2
+	bt_c: Button,	// 3
+	bt_d: Button,	// 4
+	fx_l: Button,	// 5
+	fx_r: Button,	// 6
 
 	// TODO: Add encoder fields.
 
@@ -112,7 +112,7 @@ impl Controller {
 		fx_r: Button
 	) {
 		unsafe {
-			*CONTROLLER = Some(Self {
+			CONTROLLER = Some(Self {
 				start,
 				bt_a,
 				bt_b,
@@ -120,10 +120,24 @@ impl Controller {
 				bt_d,
 				fx_l,
 				fx_r,
-				debounce_mode: DebounceMode::Hold,
+				debounce_mode: DebounceMode::default(),
 				gamepad_report: GamepadReport::default(),
 			})
 		}
+	}
+
+	/// Retrieves the Controller instance as a mutable reference.
+	///
+	/// Note: If the [`init`] function has not been called the value will be `None`.
+	pub fn get_mut() -> Option<&'static mut Self> {
+		unsafe { CONTROLLER.as_mut() }
+	}
+
+	/// Retrieves the Controller instance as an immutable reference.
+	///
+	/// Note: If the [`init`] function has not been called the value will be `None`.
+	pub fn get_ref() -> Option<&'static Self> {
+		unsafe { CONTROLLER.as_ref() }
 	}
 
 	/// Handles button presses using debouncing (if enabled) and updates the controller's lighting.
@@ -139,10 +153,16 @@ impl Controller {
 		// Gets the amount of time elapsed since the device booted in microseconds.
 		let current_time = syst.cvr.read();
 		// Includes all the buttons in an array for easy iteration.
-		let buttons = self.buttons();
-
-		// Button order is inverted to properly register the report.
-		buttons.reverse();
+		// (Button order is reversed to properly report the status).
+		let buttons = [
+			&mut self.fx_r,
+			&mut self.fx_l,
+			&mut self.bt_d,
+			&mut self.bt_c,
+			&mut self.bt_b,
+			&mut self.bt_a,
+			&mut self.start,
+		];
 
 		for button in buttons {
 			let is_pressed = button.switch.is_pressed();
@@ -194,30 +214,10 @@ impl Controller {
 		)
 	}
 
-	/// Retrieves the Controller instance as a mutable reference.
-	///
-	/// Note: If the [`init`] function has not been called the value will be `None`.
-	pub fn get_mut() -> Option<&'static mut Self> {
-		unsafe { *CONTROLLER.as_mut() }
-	}
-
-	/// Retrieves the Controller instance as an immutable reference.
-	///
-	/// Note: If the [`init`] function has not been called the value will be `None`.
-	pub fn get_ref() -> Option<&'static Self> {
-		unsafe { CONTROLLER.as_ref() }
-	}
-
-	fn buttons(&mut self) -> [&mut Button; BT_SIZE] {
-		[
-			&mut self.start,
-			&mut self.bt_a,
-			&mut self.bt_b,
-			&mut self.bt_c,
-			&mut self.bt_d,
-			&mut self.fx_l,
-			&mut self.fx_r,
-		]
+	/// Sets the debounce mode to use.
+	pub fn with_debounce_mode(&mut self, debounce_mode: DebounceMode) -> &mut Self {
+		self.debounce_mode = debounce_mode;
+		self
 	}
 }
 
@@ -234,6 +234,12 @@ pub enum DebounceMode {
 
 	/// Disables debouncing.
 	None,
+}
+
+impl Default for DebounceMode {
+	fn default() -> Self {
+		Self::None
+	}
 }
 
 
