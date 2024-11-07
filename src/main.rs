@@ -113,7 +113,7 @@ fn main() -> ! {
 
 	init(pins);
 
-	let controller = Controller::get_mut().unwrap()
+	let controller = SDVXController::get_mut().unwrap()
 		.with_debounce_mode(DebounceMode::Hold);
 
 	loop {

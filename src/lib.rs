@@ -24,7 +24,7 @@ pub const BT_SIZE: usize = 7;
 pub const SW_DEBOUNCE_DURATION_US: u64 = 4000;
 
 
-static mut CONTROLLER: Option<Controller> = None;
+static mut CONTROLLER: Option<SDVXController> = None;
 
 
 /// Initializes the pins that are used by the controller.
@@ -71,7 +71,7 @@ pub fn init(pins: bsp::Pins) {
 	let button_fx_r = Button::new(sw_fx_r_pin, led_fx_r_pin);
 
 	// Initializes the controller with the configured pins.
-	Controller::init(
+	SDVXController::init(
 		button_start,
 		button_bt_a,
 		button_bt_b,
@@ -87,7 +87,7 @@ pub fn init(pins: bsp::Pins) {
 
 
 /// Sound Voltex controller.
-pub struct Controller {
+pub struct SDVXController {
 	start: Button,	// 0
 	bt_a: Button,	// 1
 	bt_b: Button,	// 2
@@ -102,7 +102,7 @@ pub struct Controller {
 	gamepad_report: GamepadReport,
 }
 
-impl Controller {
+impl SDVXController {
 	fn init(
 		start: Button,
 		bt_a: Button,
