@@ -21,6 +21,7 @@ use bsp::hal::pac::interrupt;
 
 // Shorter alias for the Hardware Abstraction Layer.
 use bsp::hal;
+use bsp::hal::Timer;
 
 // USB Device support.
 use usb_device::{class_prelude::*, prelude::*};
@@ -44,7 +45,6 @@ static mut USB_HID: Option<HIDClass<hal::usb::UsbBus>> = None;
 fn main() -> ! {
 	// Get access to the RP2040 peripherals.
 	let mut pac = pac::Peripherals::take().unwrap();
-	let core = pac::CorePeripherals::take().unwrap();
 
 	// Set up the watchdog driver - needed by the clock setup code.
 	let mut watchdog = hal::Watchdog::new(pac.WATCHDOG);
@@ -61,6 +61,8 @@ fn main() -> ! {
 	)
 		.ok()
 		.unwrap();
+
+	let timer = Timer::new(pac.TIMER, &mut pac.RESETS, &clocks);
 
 	// Set up the pins.
 	let sio = hal::Sio::new(pac.SIO);
@@ -115,7 +117,7 @@ fn main() -> ! {
 		.with_debounce_mode(DebounceMode::Hold);
 
 	loop {
-		controller.update(&core.SYST);
+		controller.update(&timer);
 
 		let report = controller.report();
 

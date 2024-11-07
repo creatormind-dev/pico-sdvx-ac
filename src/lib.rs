@@ -5,6 +5,8 @@ pub use crate::hid_desc::*;
 
 use rp_pico as bsp;
 
+use bsp::hal::fugit::MicrosDurationU64;
+use bsp::hal::timer::{Instant, Timer};
 use bsp::hal::gpio::{
 	DynPinId,
 	Pin,
@@ -13,14 +15,13 @@ use bsp::hal::gpio::{
 	PullDown,
 	PullUp,
 };
-use cortex_m::peripheral::SYST;
 use embedded_hal::digital::{InputPin, OutputPin};
 
 
 /// The amount of buttons on the controller.
 pub const BT_SIZE: usize = 7;
 /// The duration (in microseconds) for debouncing the switches.
-pub const SW_DEBOUNCE_DURATION_US: u32 = 4000;
+pub const SW_DEBOUNCE_DURATION_US: u64 = 4000;
 
 
 static mut CONTROLLER: Option<Controller> = None;
@@ -141,55 +142,74 @@ impl Controller {
 	}
 
 	/// Handles button presses using debouncing (if enabled) and updates the controller's lighting.
-	pub fn update(&mut self, syst: &SYST) {
-		let buttons_report = self.update_inputs(syst);
+	pub fn update(&mut self, timer: &Timer) {
+		let buttons_report = self.update_inputs(timer);
+		let mut buttons = self.buttons_mut();
+
+		// TODO: Update lighting based on the HID report provided by the host.
+
+		for (i, button) in buttons.iter_mut().enumerate() {
+			if (buttons_report << i) & 1 == 1 {
+				button.led.on();
+			}
+			else {
+				button.led.off();
+			}
+		}
 
 		self.gamepad_report.buttons = buttons_report;
 	}
 
-	fn update_inputs(&mut self, syst: &SYST) -> u8 {
+	fn update_inputs(&mut self, timer: &Timer) -> u8 {
 		// State report for all buttons.
 		let mut report = 0u8;
-		// Gets the amount of time elapsed since the device booted in microseconds.
-		let current_time = syst.cvr.read();
+		// Gets the controller's debounce mode before borrowing self.
+		let debounce_mode = self.debounce_mode;
+		// Gets the amount of time elapsed since the timer was initiated (booted).
+		let now = timer.get_counter();
 		// Includes all the buttons in an array for easy iteration.
 		// (Button order is reversed to properly report the status).
-		let buttons = [
-			&mut self.fx_r,
-			&mut self.fx_l,
-			&mut self.bt_d,
-			&mut self.bt_c,
-			&mut self.bt_b,
-			&mut self.bt_a,
-			&mut self.start,
-		];
+		let mut buttons = self.buttons_mut();
+
+		// Button order is reversed to start with the MSD button (FX_R) and end with the LSD button (START).
+		buttons.reverse();
 
 		for button in buttons {
 			let is_pressed = button.switch.is_pressed();
 			let state = &mut button.state;
 
 			if is_pressed && state.last_pressed == false {
-				state.last_debounce_time = current_time;
+				state.last_debounce_time = Some(now);
 			}
 
 			state.last_pressed = is_pressed;
 
-			// The amount of time that has elapsed since the button was "pressed".
-			let elapsed = current_time - state.last_debounce_time;
+			// The amount of time that has elapsed since the button was "pressed", or 0.
+			let elapsed = match state.last_debounce_time {
+				Some(last_debounce_time) => {
+					now.checked_duration_since(last_debounce_time)
+						.unwrap_or(MicrosDurationU64::micros(0))
+						.to_micros()
+				}
+
+				// This is to avoid registering a press on eager/hold debouncing mode if the button
+				// hasn't been pressed before. It does not affect the deferred/wait and none mode.
+				None => SW_DEBOUNCE_DURATION_US + 1
+			};
 
 			// Debounce checking and reporting.
-			report = match self.debounce_mode {
+			report = match debounce_mode {
 
 				// For all cases the if statement reports the button as being pressed,
 				// while the else clause reports the opposite.
 
 				DebounceMode::Hold => {
-					if is_pressed || elapsed <= SW_DEBOUNCE_DURATION_US { (report << 1) | 1 }
+					if is_pressed || (elapsed <= SW_DEBOUNCE_DURATION_US) { (report << 1) | 1 }
 					else { report << 1 }
 				}
 
 				DebounceMode::Wait => {
-					if is_pressed && elapsed >= SW_DEBOUNCE_DURATION_US { (report << 1) | 1 }
+					if is_pressed && (elapsed >= SW_DEBOUNCE_DURATION_US) { (report << 1) | 1 }
 					else { report << 1 }
 				}
 
@@ -204,6 +224,19 @@ impl Controller {
 	}
 
 	// TODO: Implement encoder handling.
+
+	/// Returns all of the controller's buttons in an array.
+	fn buttons_mut(&mut self) -> [&mut Button; BT_SIZE] {
+		[
+			&mut self.start,
+			&mut self.bt_a,
+			&mut self.bt_b,
+			&mut self.bt_c,
+			&mut self.bt_d,
+			&mut self.fx_l,
+			&mut self.fx_r,
+		]
+	}
 
 	/// Generates a new report based on the current state of the controller.
 	pub fn report(&self) -> GamepadReport {
@@ -223,6 +256,7 @@ impl Controller {
 
 
 /// Determines the type of debounce algorithm to use with the buttons.
+#[derive(Clone, Copy)]
 pub enum DebounceMode {
 	/// Immediately reports when a switch is triggered and holds it for an [SW_DEBOUNCE_DURATION_US]
 	///	amount of time. Also known as "eager debouncing".
@@ -268,14 +302,14 @@ impl Button {
 
 struct ButtonState {
 	last_pressed: bool,
-	last_debounce_time: u32,
+	last_debounce_time: Option<Instant>,
 }
 
 impl Default for ButtonState {
 	fn default() -> Self {
 		Self {
 			last_pressed: false,
-			last_debounce_time: 0,
+			last_debounce_time: None,
 		}
 	}
 }
