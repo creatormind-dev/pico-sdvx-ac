@@ -8,13 +8,17 @@ use rp_pico as bsp;
 use bsp::hal::fugit::MicrosDurationU64;
 use bsp::hal::timer::{Instant, Timer};
 use bsp::hal::gpio::{
+	DynBankId::Bank0,
 	DynPinId,
-	Pin,
+	Function,
 	FunctionSioInput,
 	FunctionSioOutput,
+	Pin,
 	PullDown,
+	PullType,
 	PullUp,
 };
+use bsp::hal::gpio::new_pin;
 use embedded_hal::digital::{InputPin, OutputPin};
 
 
@@ -83,6 +87,26 @@ pub fn init(pins: bsp::Pins) {
 
 	// Turns the integrated LED on once the controller is plugged-in.
 	pico_led_pin.set_high().unwrap();
+}
+
+/// Initializes a GPIO pin based on its number rather than its identifier.
+pub fn init_gpio<F, P>(pin_num: u8) -> Pin<DynPinId, F, P>
+where
+	F: Function,
+	P: PullType
+{
+	let pin_id = DynPinId {
+		num: pin_num,
+		bank: Bank0,
+	};
+
+	unsafe {
+		new_pin(pin_id)
+			.into_pull_type::<P>()
+			.try_into_function::<F>()
+			.ok()
+			.unwrap()
+	}
 }
 
 
