@@ -1,0 +1,46 @@
+.program encoders
+
+.wrap_target
+	in 		pins,	2			; Shift the state of pin A and B into the ISR.
+	mov		y,		isr			; Copy the value to the scratch Y register (previous state).
+
+; Reads the state of the pins until a change is detected.
+check_loop:
+	set 	x,		0			; Reset scratch X register.
+	mov 	isr,	x			; Clear the value of the ISR.
+	in 		pins,	2			; Shift the latest state of the pins into the ISR (current state).
+	mov		x,		isr			; Copy the value to X.
+	jmp		x!=y	changed		; Compares previous value with current value, jump if changed.
+	jmp		check_loop			; Otherwise keep looping.
+
+; Get the current count and branch out depending on the previous state of the pins.
+changed:
+	mov		x,		osr			; Copy the OSR value to X - this represents the count.
+	mov		osr,	y			; Copy the previous pin state to the OSR for single-bit extraction.
+	out		y,		1			; Get the LSD bit (pin A state).
+	jmp		!y		was_zero	; Check whether the bit was zero before (determines rotation).
+	jmp		pin		increase	; If not, then it must indicate an increment if B is high.
+	jmp		decrease			; Otherwise it's a decrement.
+
+was_zero:
+	jmp		pin		decrease	; Decrease if B is high, otherwise fall through and increment.
+
+; Increments the count by inverting x, decreasing and inverting again.
+increase:
+	mov		x,		!x			; Invert the count.
+	jmp		x--		fall		; Decrement the count by one and fall through.
+fall:
+	mov		x,		!x			; Re-invert the count, it has now been incremented.
+	jmp 	submit
+
+; Decreases the count by one.
+decrease:
+	jmp		x--		submit		; Decrement the count by one and fall through to submit.
+
+; Copies the count to the ISR (for read) and the OSR to use in the next cycle.
+submit:
+	mov		isr,	x			; Copy the count to the ISR.
+	push						; Submit the count and clear the ISR for next cycle.
+	mov		osr,	x			; Copy the count to the OSR to use in the next cycle.
+
+.wrap
