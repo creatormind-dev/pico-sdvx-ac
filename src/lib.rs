@@ -5,27 +5,43 @@ pub use crate::hid_desc::*;
 
 use rp_pico as bsp;
 
-use bsp::hal::fugit::MicrosDurationU64;
-use bsp::hal::timer::{Instant, Timer};
-use bsp::hal::gpio::{
-	DynBankId::Bank0,
+use bsp::hal::pac;
+use bsp::hal;
+
+use embedded_hal::digital::{InputPin, OutputPin};
+use hal::fugit::MicrosDurationU64;
+use hal::gpio::{
 	DynPinId,
-	Function,
+	FunctionPio0,
 	FunctionSioInput,
 	FunctionSioOutput,
 	Pin,
 	PullDown,
-	PullType,
 	PullUp,
 };
-use bsp::hal::gpio::new_pin;
-use embedded_hal::digital::{InputPin, OutputPin};
+use hal::pio::{
+	InstalledProgram,
+	PinDir,
+	PIO0SM0,
+	PIO0SM1,
+	PIOBuilder,
+	Running,
+	Rx,
+	ShiftDirection,
+	StateMachine,
+	StateMachineIndex,
+	Tx,
+	UninitStateMachine,
+};
+use hal::timer::{Instant, Timer};
 
 
 /// The amount of buttons on the controller.
 pub const BT_SIZE: usize = 7;
 /// The duration (in microseconds) for debouncing the switches.
 pub const SW_DEBOUNCE_DURATION_US: u64 = 4000;
+pub const ENC_PPR: u32 = 600;
+pub const ENC_PULSE: u32 = ENC_PPR * 4;
 
 
 static mut CONTROLLER: Option<SDVXController> = None;
@@ -34,7 +50,7 @@ static mut CONTROLLER: Option<SDVXController> = None;
 /// Initializes the pins that are used by the controller.
 ///
 /// Allows access to the Controller instance.
-pub fn init(pins: bsp::Pins) {
+pub fn init_pins(pins: bsp::Pins) {
 	let mut pico_led_pin = pins.led.into_push_pull_output();
 
 	/* ~~ GPIO/PINOUT CONFIGURATION START ~~ */
@@ -64,6 +80,13 @@ pub fn init(pins: bsp::Pins) {
 	let led_fx_l_pin = pins.gpio11.into_push_pull_output().into_dyn_pin();
 	let led_fx_r_pin = pins.gpio13.into_push_pull_output().into_dyn_pin();
 
+	// These are the encoders GPIO configurations.
+
+	let enc_l_pin_a = pins.gpio14.reconfigure::<FunctionPio0, PullUp>().into_dyn_pin();
+	let enc_l_pin_b = pins.gpio15.reconfigure::<FunctionPio0, PullUp>().into_dyn_pin();
+	let enc_r_pin_a = pins.gpio16.reconfigure::<FunctionPio0, PullUp>().into_dyn_pin();
+	let enc_r_pin_b = pins.gpio17.reconfigure::<FunctionPio0, PullUp>().into_dyn_pin();
+
 	/* ~~ GPIO/PINOUT CONFIGURATION END ~~ */
 
 	let button_start = Button::new(sw_start_pin, led_start_pin);
@@ -74,6 +97,9 @@ pub fn init(pins: bsp::Pins) {
 	let button_fx_l = Button::new(sw_fx_l_pin, led_fx_l_pin);
 	let button_fx_r = Button::new(sw_fx_r_pin, led_fx_r_pin);
 
+	let encoder_vol_l = Encoder::new(enc_l_pin_a, enc_l_pin_b);
+	let encoder_vol_r = Encoder::new(enc_r_pin_a, enc_r_pin_b);
+
 	// Initializes the controller with the configured pins.
 	SDVXController::init(
 		button_start,
@@ -83,34 +109,62 @@ pub fn init(pins: bsp::Pins) {
 		button_bt_d,
 		button_fx_l,
 		button_fx_r,
+		encoder_vol_l,
+		encoder_vol_r,
 	);
 
 	// Turns the integrated LED on once the controller is plugged-in.
 	pico_led_pin.set_high().unwrap();
 }
 
-/// Initializes a GPIO pin based on its number rather than its identifier.
-pub fn init_gpio<F, P>(pin_num: u8) -> Pin<DynPinId, F, P>
-where
-	F: Function,
-	P: PullType
-{
-	let pin_id = DynPinId {
-		num: pin_num,
-		bank: Bank0,
-	};
+fn init_encoder_program<SM: StateMachineIndex>(
+	program: InstalledProgram<pac::PIO0>,
+	sm: UninitStateMachine<(pac::PIO0, SM)>,
+	pin_a: &Pin<DynPinId, FunctionPio0, PullUp>,
+	pin_b: &Pin<DynPinId, FunctionPio0, PullUp>,
+	debounce: bool,
+) -> (StateMachine<(pac::PIO0, SM), Running>, Rx<(pac::PIO0, SM)>, Tx<(pac::PIO0, SM)>) {
+	let (mut sm, rx, tx) = PIOBuilder::from_installed_program(program)
+		.set_pins(pin_a.id().num, 2)
+		.autopull(false)
+		.in_pin_base(pin_a.id().num)
+		.jmp_pin(pin_b.id().num)
+		.in_shift_direction(ShiftDirection::Left)
+		.build(sm);
 
-	unsafe {
-		new_pin(pin_id)
-			.into_pull_type::<P>()
-			.try_into_function::<F>()
-			.ok()
-			.unwrap()
+	sm.set_pindirs([
+		(pin_a.id().num, PinDir::Input),
+		(pin_b.id().num, PinDir::Input),
+	]);
+
+	if debounce {
+		sm.set_clock_divisor(5000.0);
 	}
+
+	(sm.start(), rx, tx)
+}
+
+fn parse_encoder<SM: StateMachineIndex>(
+	rx: &mut Rx<(pac::PIO0, SM)>,
+	state: &mut EncoderState,
+) -> i8 {
+	if let Some(value) = rx.read() {
+		state.curr_value += (value - state.prev_value) as i32;
+
+		while state.curr_value < 0 {
+			state.curr_value = (ENC_PULSE as i32) + state.curr_value;
+		}
+
+		state.curr_value %= ENC_PULSE as i32;
+		state.prev_value = value;
+	}
+
+	((state.curr_value as f32 / ENC_PULSE as f32) * (u8::MAX as f32 + 1.0)) as i8
 }
 
 
 /// Sound Voltex controller.
+#[allow(unused)]
 pub struct SDVXController {
 	start: Button,	// 0
 	bt_a: Button,	// 1
@@ -120,8 +174,13 @@ pub struct SDVXController {
 	fx_l: Button,	// 5
 	fx_r: Button,	// 6
 
-	// TODO: Add encoder fields.
+	vol_l: Encoder,
+	vol_r: Encoder,
 
+	rx0: Option<Rx<PIO0SM0>>,
+	rx1: Option<Rx<PIO0SM1>>,
+
+	debounce_encoders: bool,
 	debounce_mode: DebounceMode,
 	gamepad_report: GamepadReport,
 }
@@ -134,7 +193,9 @@ impl SDVXController {
 		bt_c: Button,
 		bt_d: Button,
 		fx_l: Button,
-		fx_r: Button
+		fx_r: Button,
+		vol_l: Encoder,
+		vol_r: Encoder,
 	) {
 		unsafe {
 			CONTROLLER = Some(Self {
@@ -145,6 +206,11 @@ impl SDVXController {
 				bt_d,
 				fx_l,
 				fx_r,
+				vol_l,
+				vol_r,
+				rx0: None,
+				rx1: None,
+				debounce_encoders: false,
 				debounce_mode: DebounceMode::default(),
 				gamepad_report: GamepadReport::default(),
 			})
@@ -153,21 +219,51 @@ impl SDVXController {
 
 	/// Retrieves the Controller instance as a mutable reference.
 	///
-	/// Note: If the [`init`] function has not been called the value will be `None`.
+	/// Note: If the [`init_pins`] function has not been called the value will be `None`.
 	pub fn get_mut() -> Option<&'static mut Self> {
 		unsafe { CONTROLLER.as_mut() }
 	}
 
 	/// Retrieves the Controller instance as an immutable reference.
 	///
-	/// Note: If the [`init`] function has not been called the value will be `None`.
+	/// Note: If the [`init_pins`] function has not been called the value will be `None`.
 	pub fn get_ref() -> Option<&'static Self> {
 		unsafe { CONTROLLER.as_ref() }
+	}
+
+	/// Initializes the dedicated PIO for the encoders.
+	pub fn init_encoders(
+		&mut self,
+		program: InstalledProgram<pac::PIO0>,
+		sm0: UninitStateMachine<PIO0SM0>,
+		sm1: UninitStateMachine<PIO0SM1>,
+	) {
+		let shared = unsafe { program.share() };
+
+		let (_, rx0, _) = init_encoder_program(
+			program,
+			sm0,
+			&self.vol_l.pin_a,
+			&self.vol_l.pin_b,
+			self.debounce_encoders,
+		);
+
+		let (_, rx1, _) = init_encoder_program(
+			shared,
+			sm1,
+			&self.vol_r.pin_a,
+			&self.vol_r.pin_b,
+			self.debounce_encoders,
+		);
+
+		self.rx0 = Some(rx0);
+		self.rx1 = Some(rx1);
 	}
 
 	/// Handles button presses using debouncing (if enabled) and updates the controller's lighting.
 	pub fn update(&mut self, timer: &Timer) {
 		let buttons_report = self.update_inputs(timer);
+		let encoders_report = self.update_encoders();
 		let mut buttons = self.buttons_mut();
 
 		// TODO: Update lighting based on the HID report provided by the host.
@@ -182,6 +278,8 @@ impl SDVXController {
 		}
 
 		self.gamepad_report.buttons = buttons_report;
+		self.gamepad_report.x = encoders_report.0;
+		self.gamepad_report.y = encoders_report.1;
 	}
 
 	fn update_inputs(&mut self, timer: &Timer) -> u8 {
@@ -247,7 +345,16 @@ impl SDVXController {
 		report
 	}
 
-	// TODO: Implement encoder handling.
+	fn update_encoders(&mut self) -> (i8, i8) {
+		let mut report = (0i8, 0i8);
+		let rx0 = self.rx0.as_mut().unwrap();
+		let rx1 = self.rx1.as_mut().unwrap();
+
+		report.0 = parse_encoder(rx0, &mut self.vol_l.state);
+		report.1 = parse_encoder(rx1, &mut self.vol_r.state);
+
+		report
+	}
 
 	/// Returns all of the controller's buttons in an array.
 	fn buttons_mut(&mut self) -> [&mut Button; BT_SIZE] {
@@ -271,7 +378,17 @@ impl SDVXController {
 		)
 	}
 
-	/// Sets the debounce mode to use.
+	/// Sets whether or not to debounce the encoders.
+	/// 
+	/// Default is `false`.
+	pub fn with_debounce_encoders(&mut self, debounce_encoders: bool) -> &mut Self {
+		self.debounce_encoders = debounce_encoders;
+		self
+	}
+
+	/// Sets the debounce mode to use on the buttons.
+	/// 
+	/// Default is [`DebounceMode::None`].
 	pub fn with_debounce_mode(&mut self, debounce_mode: DebounceMode) -> &mut Self {
 		self.debounce_mode = debounce_mode;
 		self
@@ -282,6 +399,9 @@ impl SDVXController {
 /// Determines the type of debounce algorithm to use with the buttons.
 #[derive(Clone, Copy)]
 pub enum DebounceMode {
+	/// Disables debouncing.
+	None,
+
 	/// Immediately reports when a switch is triggered and holds it for an [SW_DEBOUNCE_DURATION_US]
 	///	amount of time. Also known as "eager debouncing".
 	Hold,
@@ -289,9 +409,6 @@ pub enum DebounceMode {
 	/// Waits for a switch to output a constant [SW_DEBOUNCE_DURATION_US] amount of time before
 	/// reporting. Also known as "deferred debouncing".
 	Wait,
-
-	/// Disables debouncing.
-	None,
 }
 
 impl Default for DebounceMode {
@@ -301,7 +418,31 @@ impl Default for DebounceMode {
 }
 
 
-// TODO: Create Encoder struct.
+struct Encoder {
+	pin_a: Pin<DynPinId, FunctionPio0, PullUp>,
+	pin_b: Pin<DynPinId, FunctionPio0, PullUp>,
+	state: EncoderState,
+}
+
+impl Encoder {
+	fn new(
+		pin_a: Pin<DynPinId, FunctionPio0, PullUp>,
+		pin_b: Pin<DynPinId, FunctionPio0, PullUp>,
+	) -> Self {
+		Self {
+			pin_a,
+			pin_b,
+			state: EncoderState::default(),
+		}
+	}
+}
+
+
+#[derive(Default)]
+struct EncoderState {
+	prev_value: u32,
+	curr_value: i32,
+}
 
 
 struct Button {

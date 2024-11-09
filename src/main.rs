@@ -16,12 +16,16 @@ use bsp::entry;
 // Shorter alias for the Peripheral Access Crate.
 use bsp::hal::pac;
 
-// The macro for interrupt functions.
-use bsp::hal::pac::interrupt;
-
 // Shorter alias for the Hardware Abstraction Layer.
 use bsp::hal;
-use bsp::hal::Timer;
+
+use hal::Timer;
+use hal::pio::PIOExt;
+
+// The macro for interrupt functions.
+use pac::interrupt;
+
+use pio_proc::pio_file;
 
 // USB Device support.
 use usb_device::{class_prelude::*, prelude::*};
@@ -111,10 +115,18 @@ fn main() -> ! {
 		pac::NVIC::unmask(pac::Interrupt::USBCTRL_IRQ);
 	}
 
-	init(pins);
+	let (mut pio0, sm0, sm1, _, _) = pac.PIO0.split(&mut pac.RESETS);
+
+	let program = pio_file!("./pio/encoders.pio");
+	let installed = pio0.install(&program.program).unwrap();
+
+	init_pins(pins);
 
 	let controller = SDVXController::get_mut().unwrap()
-		.with_debounce_mode(DebounceMode::Hold);
+		.with_debounce_encoders(false)
+		.with_debounce_mode(DebounceMode::Wait);
+
+	controller.init_encoders(installed, sm0, sm1);
 
 	loop {
 		controller.update(&timer);

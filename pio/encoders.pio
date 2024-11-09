@@ -18,7 +18,7 @@ changed:
 	mov		x,		osr			; Copy the OSR value to X - this represents the count.
 	mov		osr,	y			; Copy the previous pin state to the OSR for single-bit extraction.
 	out		y,		1			; Get the LSD bit (pin A state).
-	jmp		!y		was_zero	; Check whether the bit was zero before (determines rotation).
+	jmp		y--		was_zero	; Check whether the bit was zero before (determines rotation).
 	jmp		pin		increase	; If not, then it must indicate an increment if B is high.
 	jmp		decrease			; Otherwise it's a decrement.
 
