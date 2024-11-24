@@ -124,7 +124,7 @@ fn main() -> ! {
 
 	let controller = SDVXController::get_mut().unwrap()
 		.with_debounce_encoders(false)
-		.with_debounce_mode(DebounceMode::Wait);
+		.with_debounce_mode(DebounceMode::Hold);
 
 	controller.init_encoders(installed, sm0, sm1);
 

@@ -40,7 +40,7 @@ use hal::timer::{Instant, Timer};
 pub const BT_SIZE: usize = 7;
 /// The duration (in microseconds) for debouncing the switches.
 pub const SW_DEBOUNCE_DURATION_US: u64 = 4000;
-pub const ENC_PPR: u32 = 600;
+pub const ENC_PPR: u32 = 360;
 pub const ENC_PULSE: u32 = ENC_PPR * 4;
 
 
@@ -147,7 +147,7 @@ fn init_encoder_program<SM: StateMachineIndex>(
 fn parse_encoder<SM: StateMachineIndex>(
 	rx: &mut Rx<(pac::PIO0, SM)>,
 	state: &mut EncoderState,
-) -> i8 {
+) -> u8 {
 	if let Some(value) = rx.read() {
 		state.curr_value += (value - state.prev_value) as i32;
 
@@ -159,7 +159,7 @@ fn parse_encoder<SM: StateMachineIndex>(
 		state.prev_value = value;
 	}
 
-	((state.curr_value as f32 / ENC_PULSE as f32) * (u8::MAX as f32 + 1.0)) as i8
+	((state.curr_value as f32 / ENC_PULSE as f32) * (u8::MAX as f32 + 1.0)) as u8
 }
 
 
@@ -345,8 +345,8 @@ impl SDVXController {
 		report
 	}
 
-	fn update_encoders(&mut self) -> (i8, i8) {
-		let mut report = (0i8, 0i8);
+	fn update_encoders(&mut self) -> (u8, u8) {
+		let mut report = (0u8, 0u8);
 		let rx0 = self.rx0.as_mut().unwrap();
 		let rx1 = self.rx1.as_mut().unwrap();
 
