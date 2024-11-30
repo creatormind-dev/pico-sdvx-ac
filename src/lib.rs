@@ -16,6 +16,7 @@ use hal::gpio::{
 	FunctionSioInput,
 	FunctionSioOutput,
 	Pin,
+	PinState,
 	PullDown,
 	PullUp,
 };
@@ -72,13 +73,13 @@ pub fn init_pins(pins: bsp::Pins) {
 
 	// These are the lamp holders/LEDs of the buttons.
 
-	let led_start_pin = pins.gpio1.into_push_pull_output().into_dyn_pin();
-	let led_bt_a_pin = pins.gpio3.into_push_pull_output().into_dyn_pin();
-	let led_bt_b_pin = pins.gpio5.into_push_pull_output().into_dyn_pin();
-	let led_bt_c_pin = pins.gpio7.into_push_pull_output().into_dyn_pin();
-	let led_bt_d_pin = pins.gpio9.into_push_pull_output().into_dyn_pin();
-	let led_fx_l_pin = pins.gpio11.into_push_pull_output().into_dyn_pin();
-	let led_fx_r_pin = pins.gpio13.into_push_pull_output().into_dyn_pin();
+	let led_start_pin = pins.gpio1.into_push_pull_output_in_state(PinState::Low).into_dyn_pin();
+	let led_bt_a_pin = pins.gpio3.into_push_pull_output_in_state(PinState::Low).into_dyn_pin();
+	let led_bt_b_pin = pins.gpio5.into_push_pull_output_in_state(PinState::Low).into_dyn_pin();
+	let led_bt_c_pin = pins.gpio7.into_push_pull_output_in_state(PinState::Low).into_dyn_pin();
+	let led_bt_d_pin = pins.gpio9.into_push_pull_output_in_state(PinState::Low).into_dyn_pin();
+	let led_fx_l_pin = pins.gpio11.into_push_pull_output_in_state(PinState::Low).into_dyn_pin();
+	let led_fx_r_pin = pins.gpio13.into_push_pull_output_in_state(PinState::Low).into_dyn_pin();
 
 	// These are the encoders GPIO configurations.
 
