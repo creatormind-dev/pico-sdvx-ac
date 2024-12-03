@@ -1,10 +1,11 @@
 #![no_std]
 #![no_main]
+#![allow(static_mut_refs)]
 
 // Ensures that the program is halted on panic.
 extern crate panic_halt;
 
-use sdvx_ac_pico::*;
+use pico_sdvx_ac::*;
 
 // The "rp_pico" crate is a Board Support Package for the RP2040 Hardware Abstraction Layer.
 // Whenever the "bsp" alias is used, it is directly referencing the rp_pico crate.
@@ -13,11 +14,11 @@ use rp_pico as bsp;
 // The macro for the start-up function.
 use bsp::entry;
 
-// Shorter alias for the Peripheral Access Crate.
-use bsp::hal::pac;
-
 // Shorter alias for the Hardware Abstraction Layer.
 use bsp::hal;
+
+// Shorter alias for the Peripheral Access Crate.
+use hal::pac;
 
 use hal::Timer;
 use hal::pio::PIOExt;
@@ -85,53 +86,53 @@ fn main() -> ! {
 		true,
 		&mut pac.RESETS,
 	));
-	unsafe {
-		USB_BUS = Some(usb_bus);
-	}
+	unsafe { USB_BUS = Some(usb_bus) };
 
 	let bus_ref = unsafe { USB_BUS.as_ref().unwrap() };
 
 	let usb_hid = HIDClass::new(bus_ref, GamepadReport::desc(), 60);
-	unsafe {
-		USB_HID = Some(usb_hid);
-	}
+	unsafe { USB_HID = Some(usb_hid) };
 
 	// Set up the USB Device.
 	let usb_dev = UsbDeviceBuilder::new(bus_ref, UsbVidPid(0x00, 0x00))
 		.strings(&[StringDescriptors::default()
 			.manufacturer("creatormind")
-			.product("SDVX Arcade Pico Controller")
+			.product("Pico SDVX Controller")
 			.serial_number("000000")
 		])
 		.unwrap()
 		.device_class(0x00)
 		.build();
-	unsafe {
-		USB_DEVICE = Some(usb_dev);
-	}
+	unsafe { USB_DEVICE = Some(usb_dev) };
 
 	unsafe {
 		// Enable the USB interrupt.
 		pac::NVIC::unmask(pac::Interrupt::USBCTRL_IRQ);
 	}
 
-	let (mut pio0, sm0, sm1, _, _) = pac.PIO0.split(&mut pac.RESETS);
+	// Retrieves the PIO0 and two of its state machines.
+	let (mut pio0, sm0, sm1, ..) = pac.PIO0.split(&mut pac.RESETS);
 
+	// Parses and installs the encoder program into the PIO.
 	let program = pio_file!("./pio/encoders.pio");
 	let installed = pio0.install(&program.program).unwrap();
+	
+	SDVXController::init(pins, timer);
 
-	init_pins(pins);
+	// Retrieves the controller instance.
+	let controller = SDVXController::get_mut().unwrap();
+	
+	// Check the SDVXControllerOptions struct for a full list of options.
+	controller.options()
+		.with_debounce_mode(DebounceMode::Hold)
+		.with_reverse_encoders(ReverseMode::Both);
 
-	let controller = SDVXController::get_mut().unwrap()
-		.with_debounce_encoders(false)
-		.with_debounce_mode(DebounceMode::Hold);
-
-	controller.init_encoders(installed, sm0, sm1);
+	controller.start(&installed, sm0, sm1);
 
 	loop {
-		controller.update(&timer);
+		controller.update();
 
-		let report = controller.report();
+		let report = controller.report_gamepad();
 
 		submit_report(report)
 			.ok()
@@ -149,7 +150,6 @@ fn submit_report(report: impl AsInputReport) -> Result<usize, UsbError> {
 }
 
 /// This function is called whenever the USB hardware generates an interrupt request.
-#[allow(non_snake_case)]
 #[interrupt]
 unsafe fn USBCTRL_IRQ() {
 	let usb_dev = USB_DEVICE.as_mut().unwrap();
