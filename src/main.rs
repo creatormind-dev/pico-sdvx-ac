@@ -90,7 +90,7 @@ fn main() -> ! {
 
 	let bus_ref = unsafe { USB_BUS.as_ref().unwrap() };
 
-	let usb_hid = HIDClass::new(bus_ref, GamepadReport::desc(), 60);
+	let usb_hid = HIDClass::new(bus_ref, GamepadReport::desc(), 10);
 	unsafe { USB_HID = Some(usb_hid) };
 
 	// Set up the USB Device.
