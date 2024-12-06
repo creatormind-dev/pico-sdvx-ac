@@ -1,6 +1,6 @@
 [package]
 name = "pico-sdvx-ac"
-version = "0.1.0"
+version = "1.0.0"
 edition = "2021"
 
 [dependencies]
@@ -8,7 +8,6 @@ cortex-m = "0.7.7"
 cortex-m-rt = "0.7.5"
 critical-section = "1.2.0"
 embedded-hal = "1.0.0"
-heapless = "0.8.0"
 panic-halt = "1.0.0"
 pio = "0.2.1"
 pio-proc = "0.2.2"

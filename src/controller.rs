@@ -51,7 +51,7 @@ pub struct SDVXController {
 
 impl SDVXController {
 	/// Initializes the components used by the controller.
-	pub fn init(pins: bsp::Pins, timer: hal::timer::Timer) {
+	pub fn init(pins: bsp::Pins, timer: hal::Timer) {
 		// Abort if the controller has already been initialized.
 		if unsafe { CONTROLLER.is_some() } { return; }
 
@@ -86,10 +86,10 @@ impl SDVXController {
 	
 		// These are the encoders GPIO configurations.
 	
-		let enc_l_pin_a = pins.gpio14.reconfigure::<gpio::FunctionPio0, gpio::PullUp>().into_dyn_pin();
-		let enc_l_pin_b = pins.gpio15.reconfigure::<gpio::FunctionPio0, gpio::PullUp>().into_dyn_pin();
-		let enc_r_pin_a = pins.gpio16.reconfigure::<gpio::FunctionPio0, gpio::PullUp>().into_dyn_pin();
-		let enc_r_pin_b = pins.gpio17.reconfigure::<gpio::FunctionPio0, gpio::PullUp>().into_dyn_pin();
+		let enc_l_pin_a: DynPio0Pin = pins.gpio14.reconfigure().into_dyn_pin();
+		let enc_l_pin_b: DynPio0Pin = pins.gpio15.reconfigure().into_dyn_pin();
+		let enc_r_pin_a: DynPio0Pin = pins.gpio16.reconfigure().into_dyn_pin();
+		let enc_r_pin_b: DynPio0Pin = pins.gpio17.reconfigure().into_dyn_pin();
 	
 		/* ~~ GPIO/PINOUT CONFIGURATION END ~~ */
 
