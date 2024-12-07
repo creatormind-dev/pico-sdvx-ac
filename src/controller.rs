@@ -22,6 +22,9 @@ pub const ENC_PPR: i32 = 360;
 /// The number of pulses needed to complete a full revolution.
 /// Alias the number of reports per revolution.
 pub const ENC_PULSE: i32 = ENC_PPR * 4;
+/// The speed at which the controller reports to the host.
+/// Higher values produce more latency, but generate less CPU stress.
+pub const USB_HID_POLL_RATE_MS: u8 = 1; 
 
 
 static mut CONTROLLER: Option<SDVXController> = None;

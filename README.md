@@ -32,6 +32,7 @@
 
 - Capable of handling 7 buttons and 2 encoders.
 - Device is recognized as an HID-compliant game controller.
+- 1000Hz polling rate (1ms latency).
 - Two optional debouncing modes for the switches: eager and deferred.
     - Configurable debounce duration in microseconds.
 - Reversible encoders with optional debouncing.

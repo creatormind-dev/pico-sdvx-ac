@@ -90,7 +90,7 @@ fn main() -> ! {
 
 	let bus_ref = unsafe { USB_BUS.as_ref().unwrap() };
 
-	let usb_hid = HIDClass::new(bus_ref, GamepadReport::desc(), 10);
+	let usb_hid = HIDClass::new(bus_ref, GamepadReport::desc(), USB_HID_POLL_RATE_MS);
 	unsafe { USB_HID = Some(usb_hid) };
 
 	// Set up the USB Device.
@@ -123,11 +123,9 @@ fn main() -> ! {
 	let controller = SDVXController::get_mut().unwrap();
 	
 	/* Check the SDVXControllerOptions struct for a full list of options. */
-	// controller.options()
-	// 	.with_debounce_encoders(false)
-	// 	.with_debounce_duration(SW_DEFAULT_DEBOUNCE_DURATION_US)
-	// 	.with_debounce_mode(DebounceMode::Hold)
-	// 	.with_reverse_encoders(ReverseMode::Both);
+	controller.options()
+		.with_debounce_mode(DebounceMode::Hold)
+		.with_reverse_encoders(ReverseMode::Both);
 
 	controller.start(&installed, sm0, sm1);
 
