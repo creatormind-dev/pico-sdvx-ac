@@ -123,9 +123,9 @@ fn main() -> ! {
 	let controller = SDVXController::get_mut().unwrap();
 	
 	/* Check the SDVXControllerOptions struct for a full list of options. */
-	controller.options()
-		.with_debounce_mode(DebounceMode::Hold)
-		.with_reverse_encoders(ReverseMode::Both);
+	// controller.options()
+	// 	.with_debounce_mode(DebounceMode::Hold)
+	// 	.with_reverse_encoders(ReverseMode::Both);
 
 	controller.start(&installed, sm0, sm1);
 

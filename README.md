@@ -27,6 +27,14 @@
     <a href="#license">License</a>
 </p>
 
+> ⚠️ This firmware was developed with an arcade-sized, Sound Voltex controller in mind. I cannot guarantee
+> that it'll work with other controllers. ⚠️
+
+Looking to build your own arcade-sized, DIY SDVX controller? I recommend following [@fabricioanciaes's OpenSDVXCon](https://github.com/fabricioanciaes/OpenSDVXCon) guide!
+Or take a look at some of the other guides in the [Rhythm Cons Wiki](https://rhythm-cons.wiki/controllers/sound-voltex/sound-voltex/),
+you can find some more helpful information over there!
+
+<br />
 
 ## Features
 
@@ -81,7 +89,12 @@ This is a list of features to implement / issues to be resolved:
 - [ ] Allow disabling lighting.
 - [ ] Implement DMA for enhanced performance.
 
+If you encounter any problems while using this firmware or would like to request a specific feature
+to be added, use the [issue tracker](https://github.com/creatormind-dev/pico-sdvx-ac/issues).
+
 ## Support
+
+If this has been of use to you consider supporting me, it is greatly appreciated!
 
 <a href="https://buymeacoffee.com/creatormind" target="_blank"><img src="https://www.buymeacoffee.com/assets/img/custom_images/purple_img.png" alt="Buy Me A Coffee" style="height: 41px !important;width: 174px !important;box-shadow: 0px 3px 2px 0px rgba(190, 190, 190, 0.5) !important;-webkit-box-shadow: 0px 3px 2px 0px rgba(190, 190, 190, 0.5) !important;" ></a>
 
