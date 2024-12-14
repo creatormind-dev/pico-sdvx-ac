@@ -90,7 +90,7 @@ fn main() -> ! {
 
 	let bus_ref = unsafe { USB_BUS.as_ref().unwrap() };
 
-	let usb_hid = HIDClass::new(bus_ref, GamepadReport::desc(), USB_HID_POLL_RATE_MS);
+	let usb_hid = HIDClass::new(bus_ref, HIDControllerDescriptor::desc(), USB_POLL_RATE_MS);
 	unsafe { USB_HID = Some(usb_hid) };
 
 	// Set up the USB Device.
@@ -134,7 +134,7 @@ fn main() -> ! {
 
 		let report = controller.report_gamepad();
 
-		submit_report(report)
+		submit_report(&report.to_bytes())
 			.ok()
 			.unwrap_or(0);
 	}
@@ -142,11 +142,22 @@ fn main() -> ! {
 
 
 /// Submits a new report to the USB stack.
-fn submit_report(report: impl AsInputReport) -> Result<usize, UsbError> {
+fn submit_report(report: &[u8]) -> Result<usize, UsbError> {
 	critical_section::with(|_| unsafe {
-		USB_HID.as_mut().map(|hid| hid.push_input(&report))
+		USB_HID.as_mut().map(|hid| hid.push_raw_input(report))
 	})
 	.unwrap()
+}
+
+fn handle_report(buffer: &[u8]) {
+	if let Some(report_id) = buffer.get(0) {
+		match report_id {
+			&HID_LIGHTNING_REPORT_ID => {
+				todo!()
+			}
+			&_ => return
+		}
+	}
 }
 
 /// This function is called whenever the USB hardware generates an interrupt request.
@@ -155,5 +166,13 @@ unsafe fn USBCTRL_IRQ() {
 	let usb_dev = USB_DEVICE.as_mut().unwrap();
 	let usb_hid = USB_HID.as_mut().unwrap();
 
-	usb_dev.poll(&mut [usb_hid]);
+	if usb_dev.poll(&mut [usb_hid]) {
+		let mut buffer = [0u8; 8];
+		
+		usb_hid.pull_raw_output(&mut buffer)
+			.ok()
+			.unwrap_or(0);
+
+		handle_report(&buffer);
+	}
 }

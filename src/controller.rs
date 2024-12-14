@@ -24,7 +24,7 @@ pub const ENC_PPR: i32 = 360;
 pub const ENC_PULSE: i32 = ENC_PPR * 4;
 /// The speed at which the controller reports to the host.
 /// Higher values produce more latency, but generate less CPU stress.
-pub const USB_HID_POLL_RATE_MS: u8 = 1; 
+pub const USB_POLL_RATE_MS: u8 = 1; 
 
 
 static mut CONTROLLER: Option<SDVXController> = None;
@@ -44,7 +44,8 @@ pub struct SDVXController {
 	encoders: [Encoder; ENC_GPIO_SIZE],
 
 	options: SDVXControllerOptions,
-	report: GamepadReport,
+	
+	gamepad: GamepadReport,
 
 	rx_l: Option<pio::Rx<pio::PIO0SM0>>,
 	rx_r: Option<pio::Rx<pio::PIO0SM1>>,
@@ -116,7 +117,7 @@ impl SDVXController {
 				buttons,
 				encoders,
 				options: SDVXControllerOptions::default(),
-				report: GamepadReport::default(),
+				gamepad: GamepadReport::default(),
 				rx_l: None,
 				rx_r: None,
 				timer,
@@ -162,12 +163,11 @@ impl SDVXController {
 		self.rx_r = Some(rx1);
 	}
 
-	/// Wrapper for all update methods. It is recommended to call this method instead of
+	/// Wrapper for update input methods. It is recommended to call this method instead of
 	/// calling each update method individually.
 	pub fn update(&mut self) {
 		self.update_encoders();
 		self.update_inputs();
-		self.update_lights();
 	}
 
 	/// Updates the HID report with the current state of the encoders.
@@ -181,14 +181,14 @@ impl SDVXController {
 		let rx_r = self.rx_r.as_mut().unwrap();
 		let reverse = self.options.reverse_encoders.state();
 
-		self.report.x = parse_encoder(
+		self.gamepad.x = parse_encoder(
 			rx_l,
 			&mut self.encoders[0].state,
 			ENC_PULSE,
 			reverse.0,
 		);
 
-		self.report.y = parse_encoder(
+		self.gamepad.y = parse_encoder(
 			rx_r,
 			&mut self.encoders[1].state,
 			ENC_PULSE,
@@ -248,7 +248,7 @@ impl SDVXController {
 			}
 		}
 
-		self.report.buttons = report;
+		self.gamepad.buttons = report;
 	}
 
 	// TODO: Add an "idle" lighting mode.
@@ -256,7 +256,7 @@ impl SDVXController {
 	/// Handles the arcade buttons lighting system.
 	pub fn update_lights(&mut self) {
 		for (i, button) in self.buttons.iter_mut().enumerate() {
-			if (self.report.buttons >> i) & 1 == 1 {
+			if (self.gamepad.buttons >> i) & 1 == 1 {
 				button.turn_on();
 			}
 			else {
@@ -268,7 +268,7 @@ impl SDVXController {
 	// TODO: Update the function to allow dynamic reporting based on the preferred HID mode.
 	/// Generates a new gamepad report based on the current state of the controller.
 	pub fn report_gamepad(&self) -> GamepadReport {
-		self.report.clone()
+		self.gamepad.clone()
 	}
 
 	/// Retrieves the controller's current options. Options can be chained for easier modification.
