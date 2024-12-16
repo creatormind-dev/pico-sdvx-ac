@@ -7,14 +7,19 @@ use hal::pio;
 
 use crate::*;
 
+/// These are traits for handling digital pin states.
 use embedded_hal::digital::{InputPin, OutputPin};
+
+/// Represents a duration in microseconds.
 use hal::fugit::MicrosDurationU64;
 
 
-/// The amount of arcade buttons on the controller.
-pub const BT_SIZE: usize = 7;
+/// The amount of LEDs in the controller.
+pub const LED_GPIO_SIZE: usize = 7;
 /// The duration (in microseconds) for debouncing the microswitches.
-pub const SW_DEFAULT_DEBOUNCE_DURATION_US: u64 = 4000;
+pub const SW_DEBOUNCE_DURATION_US: u64 = 4000;
+/// The amount of micro switches in the controller.
+pub const SW_GPIO_SIZE: usize = 7;
 /// The amount of encoders on the controller.
 pub const ENC_GPIO_SIZE: usize = 2;
 /// The resolution of the encoders in a pulses per revolution metric.
@@ -40,7 +45,8 @@ static mut CONTROLLER: Option<SDVXController> = None;
 // TODO: Add Keyboard and Mouse reporting mode.
 /// Sound Voltex controller.
 pub struct SDVXController {
-	buttons: [Button; BT_SIZE],
+	leds: [Led; LED_GPIO_SIZE],
+	switches: [Switch; SW_GPIO_SIZE],
 	encoders: [Encoder; ENC_GPIO_SIZE],
 
 	options: SDVXControllerOptions,
@@ -97,14 +103,24 @@ impl SDVXController {
 	
 		/* ~~ GPIO/PINOUT CONFIGURATION END ~~ */
 
-		let buttons: [Button; BT_SIZE] = [
-			Button::new(sw_start_pin, led_start_pin),	// 0
-			Button::new(sw_bt_a_pin, led_bt_a_pin),		// 1
-			Button::new(sw_bt_b_pin, led_bt_b_pin),		// 2
-			Button::new(sw_bt_c_pin, led_bt_c_pin),		// 3
-			Button::new(sw_bt_d_pin, led_bt_d_pin),		// 4
-			Button::new(sw_fx_l_pin, led_fx_l_pin),		// 5
-			Button::new(sw_fx_r_pin, led_fx_r_pin),		// 6
+		let leds: [Led; LED_GPIO_SIZE] = [
+			Led::new(led_start_pin),
+			Led::new(led_bt_a_pin),
+			Led::new(led_bt_b_pin),
+			Led::new(led_bt_c_pin),
+			Led::new(led_bt_d_pin),
+			Led::new(led_fx_l_pin),
+			Led::new(led_fx_r_pin),
+		];
+		
+		let switches: [Switch; SW_GPIO_SIZE] = [
+			Switch::new(sw_start_pin),					// 0
+			Switch::new(sw_bt_a_pin),					// 1
+			Switch::new(sw_bt_b_pin),					// 2
+			Switch::new(sw_bt_c_pin),					// 3
+			Switch::new(sw_bt_d_pin),					// 4
+			Switch::new(sw_fx_l_pin),					// 5
+			Switch::new(sw_fx_r_pin),					// 6
 		];
 
 		let encoders: [Encoder; ENC_GPIO_SIZE] = [
@@ -114,7 +130,8 @@ impl SDVXController {
 
 		unsafe {
 			CONTROLLER = Some(Self {
-				buttons,
+				leds,
+				switches,
 				encoders,
 				options: SDVXControllerOptions::default(),
 				gamepad: GamepadReport::default(),
@@ -201,15 +218,15 @@ impl SDVXController {
 		let now = self.timer.get_counter();
 		let debounce_mode = self.options.debounce_mode;
 		let debounce_duration = self.options.debounce_duration;
-		let mut buttons = self.buttons.each_mut();
+		let mut switches = self.switches.each_mut();
 		let mut report = 0u8;
 
 		// Button order is reversed to start with the MSD button and end with the LSD button in the report.
-		buttons.reverse();
+		switches.reverse();
 
-		for button in buttons {
-			let is_pressed = button.is_pressed();
-			let state = &mut button.state;
+		for sw in switches {
+			let is_pressed = sw.is_pressed();
+			let state = &mut sw.state;
 
 			// If there's no debouncing just check if the button is pressed or not.
 			if debounce_mode == DebounceMode::None {
@@ -255,12 +272,12 @@ impl SDVXController {
 	// TODO: Allow disabling lighting.
 	/// Handles the arcade buttons lighting system.
 	pub fn update_lights(&mut self) {
-		for (i, button) in self.buttons.iter_mut().enumerate() {
+		for (i, led) in self.leds.iter_mut().enumerate() {
 			if (self.gamepad.buttons >> i) & 1 == 1 {
-				button.turn_on();
+				led.on();
 			}
 			else {
-				button.turn_off();
+				led.off();
 			}
 		}
 	}
@@ -355,7 +372,7 @@ impl Default for SDVXControllerOptions {
 	fn default() -> Self {
 		Self {
 			debounce_encoders: false,
-			debounce_duration: MicrosDurationU64::micros(SW_DEFAULT_DEBOUNCE_DURATION_US),
+			debounce_duration: MicrosDurationU64::micros(SW_DEBOUNCE_DURATION_US),
 			debounce_mode: DebounceMode::default(),
 			reverse_encoders: ReverseMode::default(),
 		}
@@ -439,50 +456,64 @@ pub struct EncoderState {
 }
 
 
-/// Represents a button on the controller.
-pub struct Button {
-	sw_pin: DynInputPin,
-	led_pin: DynOutputPin,
-	state: ButtonState,
+/// Represents a LED on the controller.
+struct Led {
+	pin: DynOutputPin
 }
 
-impl Button {
-	/// Associates a new button.
-	pub fn new(sw_pin: DynInputPin, led_pin: DynOutputPin) -> Self {
-		Self {
-			led_pin,
-			sw_pin,
-			state: ButtonState::default(),
-		}
+impl Led {
+	/// Associates the given pin to a LED.
+	fn new(pin: DynOutputPin) -> Self {
+		Self { pin }
 	}
 
-	/// Reports whether the button's microswitch is pressed.
-	pub fn is_pressed(&mut self) -> bool {
-		self.sw_pin
-			.is_low()
-			.unwrap_or(false)
-	}
-
-	/// Turns this button's LED on.
-	pub fn turn_on(&mut self) {
-		self.led_pin
+	/// Turns the LED on.
+	fn on(&mut self) {
+		self.pin
 			.set_high()
 			.unwrap();
 	}
 
-	/// Turns this button's LED off.
-	pub fn turn_off(&mut self) {
-		self.led_pin
+	/// Turns the LED off.
+	fn off(&mut self) {
+		self.pin
 			.set_low()
 			.unwrap();
 	}
 }
 
 
-/// Represents the last state of a button.
+/// Represents a micro switch in the controller.
+struct Switch {
+	pin: DynInputPin,
+	state: SwitchState,
+}
+
+impl Switch {
+	/// Associates the given pin as a micro switch.
+	fn new(pin: DynInputPin) -> Self {
+		Self {
+			pin,
+			state: SwitchState::default(),
+		}
+	}
+
+	/// Checks whether the micro switch is pressed.
+	fn is_pressed(&mut self) -> bool {
+		self.pin
+			.is_low()
+			.ok()
+			.unwrap_or(false)
+	}
+}
+
+
+/// Represents the state of a micro switch. For debouncing purposes.
 #[derive(Default)]
-pub struct ButtonState {
+struct SwitchState {
+	/// The last time the switch was pressed.
 	last_debounce_time: Option<hal::timer::Instant>,
+	/// The last state (pressed or not) the switch had.
 	last_pressed: bool,
 }
 
