@@ -33,17 +33,20 @@ use usb_device::{class_prelude::*, prelude::*};
 
 // USB Human Interface Device (HID) Class support.
 use usbd_hid::descriptor::generator_prelude::*;
-use usbd_hid::hid_class::HIDClass;
+use usbd_hid::hid_class::{HIDClass, ReportInfo, ReportType};
 
 
 /// The USB Device Driver (shared with the interrupt).
-static mut USB_DEVICE: Option<UsbDevice<hal::usb::UsbBus>> = None;
+static mut USB_DEV: Option<UsbDevice<hal::usb::UsbBus>> = None;
 
 /// The USB Bus Driver (shared with the interrupt).
 static mut USB_BUS: Option<UsbBusAllocator<hal::usb::UsbBus>> = None;
 
-/// The USB Human Interface Device (HID) Driver (shared with the interrupt).
-static mut USB_HID: Option<HIDClass<hal::usb::UsbBus>> = None;
+/// The USB HID Joystick Driver (shared with the interrupt).
+static mut HID_JOY: Option<HIDClass<hal::usb::UsbBus>> = None;
+
+/// The USB HID Lighting Driver (shared with the interrupt).
+static mut HID_LED: Option<HIDClass<hal::usb::UsbBus>> = None;
 
 
 #[entry]
@@ -90,8 +93,11 @@ fn main() -> ! {
 
 	let bus_ref = unsafe { USB_BUS.as_ref().unwrap() };
 
-	let usb_hid = HIDClass::new(bus_ref, HIDControllerDescriptor::desc(), USB_POLL_RATE_MS);
-	unsafe { USB_HID = Some(usb_hid) };
+	let hid_joy = HIDClass::new_ep_in(bus_ref, JoystickReport::desc(), USB_POLL_RATE_MS);
+	unsafe { HID_JOY = Some(hid_joy) };
+
+	let hid_led = HIDClass::new_ep_out(bus_ref, LightingReport::desc(), USB_POLL_RATE_MS);
+	unsafe { HID_LED = Some(hid_led) };
 
 	// Set up the USB Device.
 	let usb_dev = UsbDeviceBuilder::new(bus_ref, UsbVidPid(0x00, 0x00))
@@ -103,7 +109,7 @@ fn main() -> ! {
 		.unwrap()
 		.device_class(0x00)
 		.build();
-	unsafe { USB_DEVICE = Some(usb_dev) };
+	unsafe { USB_DEV = Some(usb_dev) };
 
 	unsafe {
 		// Enable the USB interrupt.
@@ -123,16 +129,16 @@ fn main() -> ! {
 	let controller = SDVXController::get_mut().unwrap();
 	
 	/* Check the SDVXControllerOptions struct for a full list of options. */
-	// controller.options()
-	// 	.with_debounce_mode(DebounceMode::Hold)
-	// 	.with_reverse_encoders(ReverseMode::Both);
+	controller.options()
+		.with_debounce_mode(DebounceMode::Hold)
+		.with_reverse_encoders(ReverseMode::Both);
 
 	controller.start(&installed, sm0, sm1);
 
 	loop {
 		controller.update();
 
-		let report = controller.report_gamepad();
+		let report = controller.report();
 
 		submit_report(&report.to_bytes())
 			.ok()
@@ -144,35 +150,37 @@ fn main() -> ! {
 /// Submits a new report to the USB stack.
 fn submit_report(report: &[u8]) -> Result<usize, UsbError> {
 	critical_section::with(|_| unsafe {
-		USB_HID.as_mut().map(|hid| hid.push_raw_input(report))
+		HID_JOY.as_mut().map(|hid| hid.push_raw_input(report))
 	})
 	.unwrap()
 }
 
-fn handle_report(buffer: &[u8]) {
-	if let Some(report_id) = buffer.get(0) {
-		match report_id {
-			&HID_LIGHTNING_REPORT_ID => {
-				todo!()
-			}
-			&_ => return
-		}
+fn handle_report(info: ReportInfo, buffer: &[u8]) {
+	if info.report_id == HID_LIGHTING_REPORT_ID 
+		&& info.len >= HID_LIGHTING_SIZE
+		&& info.report_type == ReportType::Output
+	{
+		critical_section::with(|_| {
+			let controller = SDVXController::get_mut().unwrap();
+			let report = LightingReport::from_bytes(buffer);
+
+			controller.update_lights(report);
+		});
 	}
 }
 
 /// This function is called whenever the USB hardware generates an interrupt request.
 #[interrupt]
 unsafe fn USBCTRL_IRQ() {
-	let usb_dev = USB_DEVICE.as_mut().unwrap();
-	let usb_hid = USB_HID.as_mut().unwrap();
+	let usb_dev = USB_DEV.as_mut().unwrap();
+	let hid_joy = HID_JOY.as_mut().unwrap();
+	let hid_led = HID_LED.as_mut().unwrap();
 
-	if usb_dev.poll(&mut [usb_hid]) {
-		let mut buffer = [0u8; 8];
+	if usb_dev.poll(&mut [hid_joy, hid_led]) {
+		let mut buffer = [0u8; HID_JOYSTICK_SIZE];
 		
-		usb_hid.pull_raw_output(&mut buffer)
-			.ok()
-			.unwrap_or(0);
-
-		handle_report(&buffer);
+		if let Some(info) = hid_led.pull_raw_report(&mut buffer).ok() {
+			handle_report(info, &buffer);
+		}
 	}
 }

@@ -51,7 +51,7 @@ pub struct SDVXController {
 
 	options: SDVXControllerOptions,
 	
-	gamepad: GamepadReport,
+	joystick: JoystickReport,
 
 	rx_l: Option<pio::Rx<pio::PIO0SM0>>,
 	rx_r: Option<pio::Rx<pio::PIO0SM1>>,
@@ -134,7 +134,7 @@ impl SDVXController {
 				switches,
 				encoders,
 				options: SDVXControllerOptions::default(),
-				gamepad: GamepadReport::default(),
+				joystick: JoystickReport::default(),
 				rx_l: None,
 				rx_r: None,
 				timer,
@@ -198,14 +198,14 @@ impl SDVXController {
 		let rx_r = self.rx_r.as_mut().unwrap();
 		let reverse = self.options.reverse_encoders.state();
 
-		self.gamepad.x = parse_encoder(
+		self.joystick.x = parse_encoder(
 			rx_l,
 			&mut self.encoders[0].state,
 			ENC_PULSE,
 			reverse.0,
 		);
 
-		self.gamepad.y = parse_encoder(
+		self.joystick.y = parse_encoder(
 			rx_r,
 			&mut self.encoders[1].state,
 			ENC_PULSE,
@@ -265,27 +265,27 @@ impl SDVXController {
 			}
 		}
 
-		self.gamepad.buttons = report;
+		self.joystick.buttons = report;
 	}
 
 	// TODO: Add an "idle" lighting mode.
 	// TODO: Allow disabling lighting.
 	/// Handles the arcade buttons lighting system.
-	pub fn update_lights(&mut self) {
+	pub fn update_lights(&mut self, report: LightingReport) {
 		for (i, led) in self.leds.iter_mut().enumerate() {
-			if (self.gamepad.buttons >> i) & 1 == 1 {
-				led.on();
+			if report.buttons[i] == 0 {
+				led.off();
 			}
 			else {
-				led.off();
+				led.on();
 			}
 		}
 	}
 
 	// TODO: Update the function to allow dynamic reporting based on the preferred HID mode.
 	/// Generates a new gamepad report based on the current state of the controller.
-	pub fn report_gamepad(&self) -> GamepadReport {
-		self.gamepad.clone()
+	pub fn report(&self) -> JoystickReport {
+		self.joystick.clone()
 	}
 
 	/// Retrieves the controller's current options. Options can be chained for easier modification.
