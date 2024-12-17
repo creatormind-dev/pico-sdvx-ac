@@ -32,7 +32,7 @@ use pio_proc::pio_file;
 use usb_device::{class_prelude::*, prelude::*};
 
 // USB Human Interface Device (HID) Class support.
-use usbd_hid::descriptor::generator_prelude::*;
+use usbd_hid::descriptor::generator_prelude::SerializedDescriptor;
 use usbd_hid::hid_class::{HIDClass, ReportInfo, ReportType};
 
 
@@ -127,11 +127,6 @@ fn main() -> ! {
 
 	// Retrieves the controller instance.
 	let controller = SDVXController::get_mut().unwrap();
-	
-	/* Check the SDVXControllerOptions struct for a full list of options. */
-	controller.options()
-		.with_debounce_mode(DebounceMode::Hold)
-		.with_reverse_encoders(ReverseMode::Both);
 
 	controller.start(&installed, sm0, sm1);
 

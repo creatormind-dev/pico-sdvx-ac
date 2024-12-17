@@ -16,8 +16,6 @@ use hal::fugit::MicrosDurationU64;
 
 /// The amount of LEDs in the controller.
 pub const LED_GPIO_SIZE: usize = 7;
-/// The duration (in microseconds) for debouncing the microswitches.
-pub const SW_DEBOUNCE_DURATION_US: u64 = 4000;
 /// The amount of micro switches in the controller.
 pub const SW_GPIO_SIZE: usize = 7;
 /// The amount of encoders on the controller.
@@ -29,7 +27,16 @@ pub const ENC_PPR: i32 = 360;
 pub const ENC_PULSE: i32 = ENC_PPR * 4;
 /// The speed at which the controller reports to the host.
 /// Higher values produce more latency, but generate less CPU stress.
-pub const USB_POLL_RATE_MS: u8 = 1; 
+pub const USB_POLL_RATE_MS: u8 = 1;
+
+/// The debounce algorithm to use for debouncing the micro switches.
+pub const DEBOUNCE_MODE: DebounceMode = DebounceMode::Hold;
+/// Whether to debounce the encoders.
+pub const DEBOUNCE_ENCODERS: bool = false;
+/// Whether to reverse the direction of the encoders.
+pub const REVERSE_ENCODERS: (bool, bool) = (true, true); // (VOL-L, VOL-R)
+/// The duration (in microseconds) for debouncing the micro switches.
+pub const SW_DEBOUNCE_DURATION_US: u64 = 4000;
 
 
 static mut CONTROLLER: Option<SDVXController> = None;
@@ -48,8 +55,6 @@ pub struct SDVXController {
 	leds: [Led; LED_GPIO_SIZE],
 	switches: [Switch; SW_GPIO_SIZE],
 	encoders: [Encoder; ENC_GPIO_SIZE],
-
-	options: SDVXControllerOptions,
 	
 	joystick: JoystickReport,
 
@@ -133,7 +138,6 @@ impl SDVXController {
 				leds,
 				switches,
 				encoders,
-				options: SDVXControllerOptions::default(),
 				joystick: JoystickReport::default(),
 				rx_l: None,
 				rx_r: None,
@@ -162,7 +166,7 @@ impl SDVXController {
 			sm0,
 			enc_l.0.id().num,
 			enc_l.1.id().num,
-			self.options.debounce_encoders,
+			DEBOUNCE_ENCODERS,
 		);
 
 		let (sm1, rx1, _) = load_encoder_program(
@@ -170,7 +174,7 @@ impl SDVXController {
 			sm1,
 			enc_r.0.id().num,
 			enc_r.1.id().num,
-			self.options.debounce_encoders,
+			DEBOUNCE_ENCODERS,
 		);
 
 		// Synchronizes both state machines and starts them at the same time.
@@ -196,28 +200,25 @@ impl SDVXController {
 
 		let rx_l = self.rx_l.as_mut().unwrap();
 		let rx_r = self.rx_r.as_mut().unwrap();
-		let reverse = self.options.reverse_encoders.state();
 
 		self.joystick.x = parse_encoder(
 			rx_l,
 			&mut self.encoders[0].state,
 			ENC_PULSE,
-			reverse.0,
+			REVERSE_ENCODERS.0,
 		);
 
 		self.joystick.y = parse_encoder(
 			rx_r,
 			&mut self.encoders[1].state,
 			ENC_PULSE,
-			reverse.1,
+			REVERSE_ENCODERS.1,
 		);
 	}
 
 	/// Updates the HID report with the current state of the buttons.
 	pub fn update_inputs(&mut self) {
 		let now = self.timer.get_counter();
-		let debounce_mode = self.options.debounce_mode;
-		let debounce_duration = self.options.debounce_duration;
 		let mut switches = self.switches.each_mut();
 		let mut report = 0u8;
 
@@ -229,7 +230,7 @@ impl SDVXController {
 			let state = &mut sw.state;
 
 			// If there's no debouncing just check if the button is pressed or not.
-			if debounce_mode == DebounceMode::None {
+			if DEBOUNCE_MODE == DebounceMode::None {
 				report = if is_pressed { (report << 1) | 1 } else { report << 1 };
 				continue;
 			}
@@ -243,17 +244,18 @@ impl SDVXController {
 			if let Some(last_debounce_time) = state.last_debounce_time {
 				// The amount of time that has elapsed since the button was "pressed", or 0.
 				let elapsed = now.checked_duration_since(last_debounce_time)
-					.unwrap_or(MicrosDurationU64::micros(0));
+					.unwrap_or(MicrosDurationU64::micros(0))
+					.to_micros();
 
 				// IF reports the button as pressed, ELSE reports otherwise.
-				report = match debounce_mode {
+				report = match DEBOUNCE_MODE {
 					DebounceMode::Hold => {
-						if is_pressed || (elapsed <= debounce_duration) { (report << 1) | 1 }
+						if is_pressed || (elapsed <= SW_DEBOUNCE_DURATION_US) { (report << 1) | 1 }
 						else { report << 1 }
 					}
 
 					DebounceMode::Wait => {
-						if is_pressed && (elapsed >= debounce_duration) { (report << 1) | 1 }
+						if is_pressed && (elapsed >= SW_DEBOUNCE_DURATION_US) { (report << 1) | 1 }
 						else { report << 1 }
 					}
 
@@ -287,11 +289,6 @@ impl SDVXController {
 	pub fn report(&self) -> JoystickReport {
 		self.joystick.clone()
 	}
-
-	/// Retrieves the controller's current options. Options can be chained for easier modification.
-	pub fn options(&mut self) -> &mut SDVXControllerOptions {
-		&mut self.options
-	}
 	
 	/// Retrieves the Controller instance as a mutable reference.
 	///
@@ -309,77 +306,6 @@ impl SDVXController {
 }
 
 
-/// Provides various configurations as to how the controller will operate.
-pub struct SDVXControllerOptions {
-	debounce_encoders: bool,
-	debounce_duration: MicrosDurationU64,
-	debounce_mode: DebounceMode,
-	reverse_encoders: ReverseMode,
-}
-
-impl SDVXControllerOptions {
-	/// Sets whether to debounce the encoders.
-	///
-	/// Default is `false`.
-	pub fn with_debounce_encoders(&mut self, debounce_encoders: bool) -> &mut Self {
-		self.debounce_encoders = debounce_encoders;
-		self
-	}
-
-	/// Sets the duration to compare against when debouncing the buttons.
-	/// The value must be in microseconds.
-	///
-	/// Default is [`SW_DEFAULT_DEBOUNCE_DURATION_US`].
-	pub fn with_debounce_duration(&mut self, debounce_duration_us: u64) -> &mut Self {
-		self.debounce_duration = MicrosDurationU64::micros(debounce_duration_us);
-		self
-	}
-
-	/// Sets the debounce mode to use on the buttons.
-	///
-	/// Default is [`DebounceMode::None`].
-	pub fn with_debounce_mode(&mut self, debounce_mode: DebounceMode) -> &mut Self {
-		self.debounce_mode = debounce_mode;
-		self
-	}
-
-	/// Sets whether any of the encoders should reverse its direction.
-	/// 
-	/// Default is [`ReverseMode::None`].
-	pub fn with_reverse_encoders(&mut self, reverse_encoders: ReverseMode) -> &mut Self {
-		self.reverse_encoders = reverse_encoders;
-		self
-	}
-
-	pub fn debounce_encoders(&self) -> bool {
-		self.debounce_encoders
-	}
-
-	pub fn debounce_duration(&self) -> MicrosDurationU64 {
-		self.debounce_duration
-	}
-
-	pub fn debounce_mode(&self) -> DebounceMode {
-		self.debounce_mode
-	}
-
-	pub fn reverse_encoders(&self) -> ReverseMode {
-		self.reverse_encoders
-	}
-}
-
-impl Default for SDVXControllerOptions {
-	fn default() -> Self {
-		Self {
-			debounce_encoders: false,
-			debounce_duration: MicrosDurationU64::micros(SW_DEBOUNCE_DURATION_US),
-			debounce_mode: DebounceMode::default(),
-			reverse_encoders: ReverseMode::default(),
-		}
-	}
-}
-
-
 /// Determines the type of debounce algorithm to use with the buttons.
 /// Default is [`DebounceMode::None`].
 #[derive(Clone, Copy, Default, PartialEq)]
@@ -392,34 +318,6 @@ pub enum DebounceMode {
 	/// Waits for a switch to output a constant N amount of time before reporting.
 	/// Also known as "deferred debouncing".
 	Wait,
-}
-
-
-/// Determines which encoders should reverse their direction when reporting their data.
-/// Default is [`ReverseMode::None`].
-#[derive(Clone, Copy, Default)]
-pub enum ReverseMode {
-	/// Keeps the encoders' direction as reported.
-	#[default] None,
-	/// Reverses the direction of both encoders.
-	Both,
-	/// Reverses the direction of the left encoder **only**.
-	Left,
-	/// Reverses the direction of the right encoder **only**.
-	Right,
-}
-
-impl ReverseMode {
-	/// Returns the configuration of the encoders in a boolean tuple.
-	/// The first item is the left encoder's configuration, while the second item is the right one.
-	pub fn state(&self) -> (bool, bool) {
-		match self {
-			ReverseMode::None => (false, false), 
-			ReverseMode::Both => (true, true),
-			ReverseMode::Left => (true, false),
-			ReverseMode::Right => (false, true),
-		}
-	}
 }
 
 
