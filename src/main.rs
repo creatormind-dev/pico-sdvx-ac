@@ -26,8 +26,6 @@ use hal::pio::PIOExt;
 // The macro for interrupt functions.
 use pac::interrupt;
 
-use pio_proc::pio_file;
-
 // USB Device support.
 use usb_device::{class_prelude::*, prelude::*};
 
@@ -93,10 +91,12 @@ fn main() -> ! {
 
 	let bus_ref = unsafe { USB_BUS.as_ref().unwrap() };
 
-	let hid_joy = HIDClass::new_ep_in(bus_ref, JoystickReport::desc(), USB_POLL_RATE_MS);
+	// HID for the Joystick (input).
+	let hid_joy = HIDClass::new_ep_in(bus_ref, JoystickReport::desc(), HID_JOYSTICK_POLL_RATE_MS);
 	unsafe { HID_JOY = Some(hid_joy) };
 
-	let hid_led = HIDClass::new_ep_out(bus_ref, LightingReport::desc(), USB_POLL_RATE_MS);
+	// HID for the Lighting (output).
+	let hid_led = HIDClass::new_ep_out(bus_ref, LightingReport::desc(), HID_LIGHTING_POLL_RATE_MS);
 	unsafe { HID_LED = Some(hid_led) };
 
 	// Set up the USB Device.
@@ -120,7 +120,7 @@ fn main() -> ! {
 	let (mut pio0, sm0, sm1, ..) = pac.PIO0.split(&mut pac.RESETS);
 
 	// Parses and installs the encoder program into the PIO.
-	let program = pio_file!("./pio/encoders.pio");
+	let program = pio_proc::pio_file!("./pio/encoders.pio");
 	let installed = pio0.install(&program.program).unwrap();
 	
 	SDVXController::init(pins, timer);
@@ -150,9 +150,10 @@ fn submit_report(report: &[u8]) -> Result<usize, UsbError> {
 	.unwrap()
 }
 
+/// Parses a report from the host as needed.
 fn handle_report(info: ReportInfo, buffer: &[u8]) {
 	if info.report_id == HID_LIGHTING_REPORT_ID 
-		&& info.len >= HID_LIGHTING_SIZE
+		&& info.len >= HID_LIGHTING_DATA_SIZE
 		&& info.report_type == ReportType::Output
 	{
 		critical_section::with(|_| {
@@ -172,7 +173,7 @@ unsafe fn USBCTRL_IRQ() {
 	let hid_led = HID_LED.as_mut().unwrap();
 
 	if usb_dev.poll(&mut [hid_joy, hid_led]) {
-		let mut buffer = [0u8; HID_JOYSTICK_SIZE];
+		let mut buffer = [0u8; HID_LIGHTING_DATA_SIZE];
 		
 		if let Some(info) = hid_led.pull_raw_report(&mut buffer).ok() {
 			handle_report(info, &buffer);

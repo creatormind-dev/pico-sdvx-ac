@@ -15,19 +15,16 @@ use hal::fugit::MicrosDurationU64;
 
 
 /// The amount of LEDs in the controller.
-pub const LED_GPIO_SIZE: usize = 7;
+pub const LED_GPIO_SIZE: u8 = 7;
 /// The amount of micro switches in the controller.
-pub const SW_GPIO_SIZE: usize = 7;
+pub const SW_GPIO_SIZE: u8 = 7;
 /// The amount of encoders on the controller.
-pub const ENC_GPIO_SIZE: usize = 2;
+pub const ENC_GPIO_SIZE: u8 = 2;
 /// The resolution of the encoders in a pulses per revolution metric.
 pub const ENC_PPR: i32 = 360;
 /// The number of pulses needed to complete a full revolution.
 /// Alias the number of reports per revolution.
 pub const ENC_PULSE: i32 = ENC_PPR * 4;
-/// The speed at which the controller reports to the host.
-/// Higher values produce more latency, but generate less CPU stress.
-pub const USB_POLL_RATE_MS: u8 = 1;
 
 /// The debounce algorithm to use for debouncing the micro switches.
 pub const DEBOUNCE_MODE: DebounceMode = DebounceMode::Hold;
@@ -36,13 +33,21 @@ pub const DEBOUNCE_ENCODERS: bool = false;
 /// Whether to reverse the direction of the encoders.
 pub const REVERSE_ENCODERS: (bool, bool) = (true, true); // (VOL-L, VOL-R)
 /// The duration (in microseconds) for debouncing the micro switches.
-pub const SW_DEBOUNCE_DURATION_US: u64 = 4000;
+pub const SW_DEBOUNCE_DURATION_US: u64 = 8000;
+
+/// The interval at which the controller polls the inputs to the host.
+/// * Higher values produce more latency, but generate less CPU stress.
+/// * Lower values generate a quicker response, but may cause the controller to become unstable.
+pub const HID_JOYSTICK_POLL_RATE_MS: u8 = 2;
+/// The interval at which the controller polls the lights from the host.
+/// There is no need to lower this value, as it will put more stress on the CPU.
+pub const HID_LIGHTING_POLL_RATE_MS: u8 = 60;
 
 
 static mut CONTROLLER: Option<SDVXController> = None;
 
 
-// The GPIO pin order for the microswitches and LEDs is as follows:
+// The GPIO pin order for the micro switches and LEDs is as follows:
 // [START] -> [BT-A] -> [BT-B] -> [BT-C] -> [BT-D] -> [FX-L] -> [FX-R]
 
 // The GPIO pin order for the encoders is as follows:
@@ -52,9 +57,9 @@ static mut CONTROLLER: Option<SDVXController> = None;
 // TODO: Add Keyboard and Mouse reporting mode.
 /// Sound Voltex controller.
 pub struct SDVXController {
-	leds: [Led; LED_GPIO_SIZE],
-	switches: [Switch; SW_GPIO_SIZE],
-	encoders: [Encoder; ENC_GPIO_SIZE],
+	leds: [Led; LED_GPIO_SIZE as _],
+	switches: [Switch; SW_GPIO_SIZE as _],
+	encoders: [Encoder; ENC_GPIO_SIZE as _],
 	
 	joystick: JoystickReport,
 
@@ -108,7 +113,7 @@ impl SDVXController {
 	
 		/* ~~ GPIO/PINOUT CONFIGURATION END ~~ */
 
-		let leds: [Led; LED_GPIO_SIZE] = [
+		let leds: [Led; LED_GPIO_SIZE as _] = [
 			Led::new(led_start_pin),
 			Led::new(led_bt_a_pin),
 			Led::new(led_bt_b_pin),
@@ -118,7 +123,7 @@ impl SDVXController {
 			Led::new(led_fx_r_pin),
 		];
 		
-		let switches: [Switch; SW_GPIO_SIZE] = [
+		let switches: [Switch; SW_GPIO_SIZE as _] = [
 			Switch::new(sw_start_pin),					// 0
 			Switch::new(sw_bt_a_pin),					// 1
 			Switch::new(sw_bt_b_pin),					// 2
@@ -128,7 +133,7 @@ impl SDVXController {
 			Switch::new(sw_fx_r_pin),					// 6
 		];
 
-		let encoders: [Encoder; ENC_GPIO_SIZE] = [
+		let encoders: [Encoder; ENC_GPIO_SIZE as _] = [
 			Encoder::new(enc_l_pin_a, enc_l_pin_b),		// 0
 			Encoder::new(enc_r_pin_a, enc_r_pin_b),		// 1
 		];
