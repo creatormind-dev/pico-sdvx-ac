@@ -131,7 +131,12 @@ fn main() -> ! {
 	controller.start(&installed, sm0, sm1);
 
 	loop {
-		controller.update();
+		controller.update_inputs();
+		controller.update_encoders();
+		
+		if FALLBACK_LIGHTING_MODE != FallbackLightingMode::None {
+			controller.update_lights(None);
+		}
 
 		let report = controller.report();
 
@@ -160,7 +165,7 @@ fn handle_report(info: ReportInfo, buffer: &[u8]) {
 			let controller = SDVXController::get_mut().unwrap();
 			let report = LightingReport::from_bytes(buffer);
 
-			controller.update_lights(report);
+			controller.update_lights(Some(report));
 		});
 	}
 }

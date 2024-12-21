@@ -108,7 +108,7 @@ impl SerializedDescriptor for LightingReport {
 			0x95, LED_REPORT_SIZE,						//   REPORT_COUNT (_)
 			0x15, 0x00,									//   LOGICAL_MINIMUM (0)
 			0x26, 0xFF, 0x00,							//   LOGICAL_MAXIMUM (255)
-			0x05, 0x08,									//   USAGE_PAGE (Ordinals)
+			0x05, 0x08,									//   USAGE_PAGE (LEDs)
 			0x79, 0x04,									//   STRING_MINIMUM (4)
 			0x89, 0x10,									//   STRING_MAXIMUM (16)
 			0x19, 0x01,									//   USAGE_MINIMUM (0x01)

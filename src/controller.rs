@@ -32,6 +32,10 @@ pub const DEBOUNCE_MODE: DebounceMode = DebounceMode::Hold;
 pub const DEBOUNCE_ENCODERS: bool = false;
 /// Whether to reverse the direction of the encoders.
 pub const REVERSE_ENCODERS: (bool, bool) = (true, true); // (VOL-L, VOL-R)
+/// The duration (in microseconds) to wait for before using a fallback lighting mode.
+pub const REACTIVE_TIMEOUT_US: u64 = 3000;
+/// Fallback mode to use when the reactive HID lighting hasn't reported data.
+pub const FALLBACK_LIGHTING_MODE: FallbackLightingMode = FallbackLightingMode::Reflective;
 /// The duration (in microseconds) for debouncing the micro switches.
 pub const SW_DEBOUNCE_DURATION_US: u64 = 8000;
 
@@ -66,6 +70,8 @@ pub struct SDVXController {
 	rx_l: Option<pio::Rx<pio::PIO0SM0>>,
 	rx_r: Option<pio::Rx<pio::PIO0SM1>>,
 
+	last_timeout: hal::timer::Instant,
+	
 	timer: hal::Timer,
 }
 
@@ -146,6 +152,7 @@ impl SDVXController {
 				joystick: JoystickReport::default(),
 				rx_l: None,
 				rx_r: None,
+				last_timeout: timer.get_counter(),
 				timer,
 			});
 		}
@@ -187,13 +194,6 @@ impl SDVXController {
 
 		self.rx_l = Some(rx0);
 		self.rx_r = Some(rx1);
-	}
-
-	/// Wrapper for update input methods. It is recommended to call this method instead of
-	/// calling each update method individually.
-	pub fn update(&mut self) {
-		self.update_encoders();
-		self.update_inputs();
 	}
 
 	/// Updates the HID report with the current state of the encoders.
@@ -275,17 +275,48 @@ impl SDVXController {
 		self.joystick.buttons = report;
 	}
 
-	// TODO: Add an "idle" lighting mode.
 	// TODO: Allow disabling lighting.
 	/// Handles the arcade buttons lighting system.
-	pub fn update_lights(&mut self, report: LightingReport) {
+	pub fn update_lights(&mut self, report: Option<LightingReport>) {
+		let now = self.timer.get_counter();
+		let elapsed = self.last_timeout.checked_duration_since(now)
+			.unwrap_or(MicrosDurationU64::micros(0))
+			.to_micros();
+
+		let mut lighting = report.unwrap_or_default();
+
+		// Once the timeout for reactive lighting passes a fallback system is used.
+		if elapsed > REACTIVE_TIMEOUT_US {
+			match FALLBACK_LIGHTING_MODE {
+				// Just turns all LEDs on.
+				FallbackLightingMode::Idle => {
+					lighting.buttons = [1u8; LED_GPIO_SIZE as _];
+				}
+
+				// Reflects inputs.
+				FallbackLightingMode::Reflective => {
+					for i in 0..lighting.buttons.len() {
+						lighting.buttons[i] = (self.joystick.buttons >> i) & 1;
+					}
+				}
+
+				_ => {}
+			}
+		}
+
+		// Update the LEDs.
 		for (i, led) in self.leds.iter_mut().enumerate() {
-			if report.buttons[i] == 0 {
+			if lighting.buttons[i] == 0 {
 				led.off();
 			}
 			else {
 				led.on();
 			}
+		}
+
+		// Update the last timeout if the method was called via HID reporting.
+		if report.is_some() {
+			self.last_timeout = now;
 		}
 	}
 
@@ -312,17 +343,30 @@ impl SDVXController {
 
 
 /// Determines the type of debounce algorithm to use with the buttons.
-/// Default is [`DebounceMode::None`].
-#[derive(Clone, Copy, Default, PartialEq)]
+#[derive(Clone, Copy, PartialEq)]
 pub enum DebounceMode {
 	/// Disables debouncing.
-	#[default] None,
+	None,
 	/// Immediately reports when a switch is triggered and holds it for an N amount of time.
 	///	Also known as "eager debouncing".
 	Hold,
 	/// Waits for a switch to output a constant N amount of time before reporting.
 	/// Also known as "deferred debouncing".
 	Wait,
+}
+
+
+/// Specifies the lighting system to use in the controller if no HID data is reported within a
+/// [`REACTIVE_TIMEOUT_US`] duration.
+#[derive(Clone, Copy, PartialEq)]
+pub enum FallbackLightingMode {
+	/// No fallback lighting is used.
+	None,
+	/// An "idle" lighting mode will be activated.
+	Idle,
+	/// The lighting system will reflect the inputs entered.
+	/// This mode is recommended if the software doesn't support HID reporting.
+	Reflective,
 }
 
 
