@@ -179,7 +179,7 @@ unsafe fn USBCTRL_IRQ() {
 
 	if usb_dev.poll(&mut [hid_joy, hid_led]) {
 		let mut buffer = [0u8; HID_LIGHTING_DATA_SIZE];
-		
+
 		if let Some(info) = hid_led.pull_raw_report(&mut buffer).ok() {
 			handle_report(info, &buffer);
 		}

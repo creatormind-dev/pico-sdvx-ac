@@ -279,7 +279,7 @@ impl SDVXController {
 	/// Handles the arcade buttons lighting system.
 	pub fn update_lights(&mut self, report: Option<LightingReport>) {
 		let now = self.timer.get_counter();
-		let elapsed = self.last_timeout.checked_duration_since(now)
+		let elapsed = now.checked_duration_since(self.last_timeout)
 			.unwrap_or(MicrosDurationU64::micros(0))
 			.to_micros();
 
